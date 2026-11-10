@@ -5003,9 +5003,23 @@ do
                 end
 
                 KeybindsToggle:SetText(("[%s] %s (%s)"):format(KeyValueNames[KeyPicker.DisplayValue] or KeyPicker.DisplayValue, KeyPicker.Text, KeyModeNames[KeyPicker.Mode] or KeyPicker.Mode))
-                KeybindsToggle:SetVisibility(KeyPicker.MenuVisible ~= false)
+                KeybindsToggle:SetVisibility(KeyPicker:IsMenuVisible(State))
                 KeybindsToggle:Display(State)
             end
+        end
+
+        function KeyPicker:IsMenuVisible(State)
+            if KeyPicker.MenuVisible == false then
+                return false
+            end
+
+            if KeyPicker.Mode == "Always" then
+                return true
+            elseif KeyPicker.Mode == "Toggle" or KeyPicker.Mode == "Hold" then
+                return State == true
+            end
+
+            return true
         end
 
         function KeyPicker:GetState()
