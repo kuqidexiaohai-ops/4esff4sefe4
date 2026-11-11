@@ -6091,63 +6091,6 @@ do
                 BackgroundTransparency = 1,
             }):Play()
         end))
-        do
-            local function CreateButton(Text, Func)
-                local Button = New("TextButton", {
-                    BackgroundColor3 = "MainColor",
-                    BackgroundTransparency = 1,
-                    Size = UDim2.new(1, 0, 0, 21),
-                    Text = Text,
-                    TextSize = 14,
-                    Parent = ContextMenu.Menu,
-                })
-
-                table.insert(ColorPicker.Connections, Button.MouseButton1Click:Connect(function()
-                    Library:SafeCallback(Func)
-                    ContextMenu:Close()
-                end))
-
-                table.insert(ColorPicker.Connections, Button.MouseEnter:Connect(function()
-                    TweenService:Create(Button, Library.TweenInfo, {
-                        BackgroundTransparency = 0.7,
-                    }):Play()
-                end))
-
-                table.insert(ColorPicker.Connections, Button.MouseLeave:Connect(function()
-                    TweenService:Create(Button, Library.TweenInfo, {
-                        BackgroundTransparency = 1,
-                    }):Play()
-                end))
-            end
-
-            CreateButton("复制颜色", function()
-                Library.CopiedColor = { ColorPicker.Value, ColorPicker.Transparency }
-            end)
-
-            ColorPicker.SetValueRGB = function(...) end
-            CreateButton("粘贴颜色", function()
-                if not Library.CopiedColor then
-                    return
-                end
-
-                ColorPicker:SetValueRGB(Library.CopiedColor[1], Library.CopiedColor[2])
-            end)
-
-            if setclipboard then
-                CreateButton("复制 HEX", function()
-                    setclipboard(tostring(ColorPicker.Value:ToHex()))
-                end)
-
-                CreateButton("复制 RGB", function()
-                    setclipboard(table.concat({
-                        math.floor(ColorPicker.Value.R * 255),
-                        math.floor(ColorPicker.Value.G * 255),
-                        math.floor(ColorPicker.Value.B * 255),
-                    }, ", "))
-                end)
-            end
-        end
-
         local ActionHolder = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 20),
@@ -6163,7 +6106,7 @@ do
         local CopyColorButton = New("TextButton", {
             BackgroundColor3 = "MainColor",
             Size = UDim2.fromScale(1, 1),
-            Text = "复制颜色",
+            Text = "复制 HEX 颜色",
             TextSize = 14,
             Parent = ActionHolder,
         })
@@ -6179,29 +6122,29 @@ do
             })
         )
 
-        local PasteColorButton = New("TextButton", {
+        local CopyRgbButton = New("TextButton", {
             BackgroundColor3 = "MainColor",
             Size = UDim2.fromScale(1, 1),
-            Text = "粘贴颜色",
+            Text = "复制 RGB 颜色",
             TextSize = 14,
             Parent = ActionHolder,
         })
         New("UIStroke", {
             Color = "OutlineColor",
-            Parent = PasteColorButton,
+            Parent = CopyRgbButton,
         })
         table.insert(
             Library.Corners,
             New("UICorner", {
                 CornerRadius = UDim.new(0, Library.CornerRadius / 2),
-                Parent = PasteColorButton,
+                Parent = CopyRgbButton,
             })
         )
 
         local CopyColorOriginalText = CopyColorButton.Text
-        local PasteColorOriginalText = PasteColorButton.Text
-        local CopyColorResetId = 0
-        local PasteColorResetId = 0
+        local CopyRgbOriginalText = CopyRgbButton.Text
+        local CopyColorReset = { Id = 0 }
+        local CopyRgbReset = { Id = 0 }
 
         table.insert(ColorPicker.Connections, CopyColorButton.MouseEnter:Connect(function()
             TweenService:Create(CopyColorButton, Library.TweenInfo, {
@@ -6215,52 +6158,45 @@ do
             }):Play()
         end))
 
-        table.insert(ColorPicker.Connections, PasteColorButton.MouseEnter:Connect(function()
-            TweenService:Create(PasteColorButton, Library.TweenInfo, {
+        table.insert(ColorPicker.Connections, CopyRgbButton.MouseEnter:Connect(function()
+            TweenService:Create(CopyRgbButton, Library.TweenInfo, {
                 BackgroundColor3 = Library:GetBetterColor(Library.Scheme.MainColor, 10),
             }):Play()
         end))
 
-        table.insert(ColorPicker.Connections, PasteColorButton.MouseLeave:Connect(function()
-            TweenService:Create(PasteColorButton, Library.TweenInfo, {
+        table.insert(ColorPicker.Connections, CopyRgbButton.MouseLeave:Connect(function()
+            TweenService:Create(CopyRgbButton, Library.TweenInfo, {
                 BackgroundColor3 = Library.Scheme.MainColor,
             }):Play()
         end))
 
-        table.insert(ColorPicker.Connections, CopyColorButton.MouseButton1Click:Connect(function()
-            Library.CopiedColor = { ColorPicker.Value, ColorPicker.Transparency }
-
-            CopyColorResetId += 1
-            local ThisResetId = CopyColorResetId
-            CopyColorButton.Text = "已复制颜色"
+        local function CopyToClipboard(Button, OriginalText, ResetState, Value)
+            ResetState.Id += 1
+            local ThisResetId = ResetState.Id
+            local Success = setclipboard and pcall(setclipboard, Value)
+            Button.Text = not setclipboard and "不支持剪贴板" or Success and "已复制" or "复制失败"
 
             task.delay(1, function()
-                if ColorPicker.Destroyed or ThisResetId ~= CopyColorResetId then
+                if ColorPicker.Destroyed or ThisResetId ~= ResetState.Id then
                     return
                 end
 
-                CopyColorButton.Text = CopyColorOriginalText
+                Button.Text = OriginalText
             end)
+        end
+
+        table.insert(ColorPicker.Connections, CopyColorButton.MouseButton1Click:Connect(function()
+            local Hex = tostring(ColorPicker.Value:ToHex())
+            CopyToClipboard(CopyColorButton, CopyColorOriginalText, CopyColorReset, "#" .. Hex)
         end))
 
-        table.insert(ColorPicker.Connections, PasteColorButton.MouseButton1Click:Connect(function()
-            PasteColorResetId += 1
-            local ThisResetId = PasteColorResetId
-
-            if not Library.CopiedColor then
-                PasteColorButton.Text = "无可粘贴内容"
-            else
-                ColorPicker:SetValueRGB(Library.CopiedColor[1], Library.CopiedColor[2])
-                PasteColorButton.Text = "已粘贴颜色"
-            end
-
-            task.delay(1, function()
-                if ColorPicker.Destroyed or ThisResetId ~= PasteColorResetId then
-                    return
-                end
-
-                PasteColorButton.Text = PasteColorOriginalText
-            end)
+        table.insert(ColorPicker.Connections, CopyRgbButton.MouseButton1Click:Connect(function()
+            local Rgb = table.concat({
+                math.floor(ColorPicker.Value.R * 255),
+                math.floor(ColorPicker.Value.G * 255),
+                math.floor(ColorPicker.Value.B * 255),
+            }, ", ")
+            CopyToClipboard(CopyRgbButton, CopyRgbOriginalText, CopyRgbReset, Rgb)
         end))
 
         function ColorPicker:SetHSVFromRGB(Color)
