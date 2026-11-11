@@ -6006,7 +6006,7 @@ do
         )
 
         local ContextMenu
-        ContextMenu = Library:AddContextMenu(Holder, UDim2.fromOffset(180, 0), function()
+        ContextMenu = Library:AddContextMenu(Holder, UDim2.fromOffset(93, 0), function()
             return { Holder.AbsoluteSize.X + 1.5, 0.5 }
         end, 1, function(Active: boolean)
             local Half = UDim.new(0, Library.CornerRadius / 2)
@@ -6041,11 +6041,11 @@ do
             AnimationButton,
             UDim2.fromOffset(128, 0),
             function()
-                return { AnimationButton.AbsoluteSize.X, 0 }
+                return { AnimationButton.AbsoluteSize.X + 5, 0 }
             end,
             1
         )
-        AnimationMenu.List.Padding = UDim.new(0, 2)
+        AnimationMenu.List.Padding = UDim.new(0, 3)
         table.insert(ColorPicker.Connections, AnimationButton.MouseButton1Click:Connect(function()
             if not ParentObj.Disabled then
                 AnimationMenu:Toggle()
@@ -6057,7 +6057,7 @@ do
                 AutoButtonColor = false,
                 BackgroundColor3 = "MainColor",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 21),
+                Size = UDim2.new(1, 0, 0, 22),
                 Text = ModeName,
                 TextSize = 14,
                 TextXAlignment = Enum.TextXAlignment.Left,
