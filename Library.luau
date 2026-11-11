@@ -4975,6 +4975,13 @@ do
         function KeyPicker:Update()
             local Disabled = ParentObj.Disabled == true
 
+            local DisplayKey = KeyPicker.Value or "None"
+            local DisplayModifiers = VerifyModifiers(KeyPicker.Modifiers)
+            KeyPicker.Modifiers = DisplayModifiers
+            KeyPicker.DisplayValue = if GetTableSize(DisplayModifiers) > 0
+                then (table.concat(DisplayModifiers, " + ") .. " + " .. DisplayKey)
+                else DisplayKey
+
             if Disabled and Picking then
                 SetPickingState(false, true)
             end
@@ -5008,6 +5015,11 @@ do
             end
 
             if KeybindsToggle.Loaded then
+                local KeybindMenu = Library.KeybindMenu
+                if KeybindMenu and KeybindMenu.SettingsOpen then
+                    KeybindMenu:RefreshSettings()
+                end
+
                 if ShowToggle then
                     KeybindsToggle:SetNormal(false)
                 else
@@ -11710,13 +11722,18 @@ function Library:CreateWindow(WindowInfo)
                 })
 
                 local Visible = Option.MenuVisible ~= false
+                local OptionKey = Option.Value or "None"
+                local OptionModifiers = typeof(Option.Modifiers) == "table" and Option.Modifiers or {}
+                local OptionDisplayValue = if #OptionModifiers > 0
+                    then (table.concat(OptionModifiers, " + ") .. " + " .. OptionKey)
+                    else OptionKey
                 New("TextLabel", {
                     AutomaticSize = Enum.AutomaticSize.X,
                     BackgroundTransparency = 1,
                     Position = UDim2.fromOffset(22, 0),
                     Size = UDim2.fromScale(0, 1),
                     Text = ("[%s] %s (%s)"):format(
-                        KeyValueNames[Option.DisplayValue or Option.Value or "None"] or "无",
+                        KeyValueNames[OptionDisplayValue] or OptionDisplayValue,
                         Option.Text or tostring(Idx),
                         KeyModeNames[Option.Mode or "Toggle"] or "切换"
                     ),
