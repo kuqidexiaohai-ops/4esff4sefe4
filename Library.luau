@@ -5634,11 +5634,11 @@ do
         }
         local AnimationMode = "None"
         local AnimationConnection
+        local AnimationMenu
         local AnimationUpdating = false
         local AnimationElapsed = 0
         local AnimationBaseHue, AnimationBaseSaturation, AnimationBaseValue = ColorPicker.Value:ToHSV()
         local AnimationBaseTransparency = ColorPicker.Transparency
-        local AnimationDropdown
 
         local function StopAnimation()
             if AnimationConnection then
@@ -6027,46 +6027,70 @@ do
         end, false, "no_top_left")
         ColorPicker.ContextMenu = ContextMenu
         ContextMenu.List.Padding = UDim.new(0, 6)
-        local AnimationDropdownHolder = New("Frame", {
+        local AnimationButton = New("TextButton", {
+            AutoButtonColor = false,
+            BackgroundColor3 = "MainColor",
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 42),
-            Parent = ContextMenu.Menu,
-        })
-        local AnimationDropdownHost = {
-            Destroyed = false,
-            Type = "Groupbox",
-            Elements = {},
-            DependencyBoxes = {},
-            Container = AnimationDropdownHolder,
-            Parent = ColorPicker,
-            Resize = function() end,
-        }
-        New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, 0),
-            Size = UDim2.new(1, 0, 0, 16),
-            Text = "动画效果",
+            Size = UDim2.new(1, 0, 0, 21),
+            Text = "动画效果：无动画  ›",
             TextSize = 14,
             TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = AnimationDropdownHolder,
+            Parent = ContextMenu.Menu,
         })
-        AnimationDropdownHost.Text = "动画效果"
-        AnimationDropdownHost.TextLabel = AnimationDropdownHolder
-        setmetatable(AnimationDropdownHost, BaseGroupbox)
-        local AnimationDropdownId = "ColorPickerAnimation_" .. tostring(ColorPicker)
-        AnimationDropdownHost:AddDropdown(AnimationDropdownId, {
-            Text = nil,
-            Values = AnimationModeValues,
-            Default = "无动画",
-            Callback = function(SelectedMode)
-                AnimationMode = AnimationModeByName[SelectedMode] or "None"
-                StartAnimation()
+        AnimationMenu = Library:AddContextMenu(
+            AnimationButton,
+            UDim2.fromOffset(128, 0),
+            function()
+                return { AnimationButton.AbsoluteSize.X, 0 }
             end,
-        })
-        AnimationDropdown = Options[AnimationDropdownId]
-        AnimationDropdown.Holder.Position = UDim2.fromOffset(0, 18)
-        AnimationDropdown.Holder.Size = UDim2.new(1, 0, 0, 21)
-        local AnimationDropdownIdForCleanup = AnimationDropdownId
+            1
+        )
+        AnimationMenu.List.Padding = UDim.new(0, 2)
+        table.insert(ColorPicker.Connections, AnimationButton.MouseButton1Click:Connect(function()
+            if not ParentObj.Disabled then
+                AnimationMenu:Toggle()
+            end
+        end))
+
+        for _, ModeName in AnimationModeValues do
+            local ModeButton = New("TextButton", {
+                AutoButtonColor = false,
+                BackgroundColor3 = "MainColor",
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 21),
+                Text = ModeName,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = AnimationMenu.Menu,
+            })
+            table.insert(ColorPicker.Connections, ModeButton.MouseButton1Click:Connect(function()
+                AnimationMode = AnimationModeByName[ModeName] or "None"
+                AnimationButton.Text = "动画效果：" .. ModeName .. "  ›"
+                StartAnimation()
+                AnimationMenu:Close()
+            end))
+            table.insert(ColorPicker.Connections, ModeButton.MouseEnter:Connect(function()
+                TweenService:Create(ModeButton, Library.TweenInfo, {
+                    BackgroundTransparency = 0.7,
+                }):Play()
+            end))
+            table.insert(ColorPicker.Connections, ModeButton.MouseLeave:Connect(function()
+                TweenService:Create(ModeButton, Library.TweenInfo, {
+                    BackgroundTransparency = 1,
+                }):Play()
+            end))
+        end
+
+        table.insert(ColorPicker.Connections, AnimationButton.MouseEnter:Connect(function()
+            TweenService:Create(AnimationButton, Library.TweenInfo, {
+                BackgroundTransparency = 0.7,
+            }):Play()
+        end))
+        table.insert(ColorPicker.Connections, AnimationButton.MouseLeave:Connect(function()
+            TweenService:Create(AnimationButton, Library.TweenInfo, {
+                BackgroundTransparency = 1,
+            }):Play()
+        end))
         do
             local function CreateButton(Text, Func)
                 local Button = New("TextButton", {
@@ -6479,10 +6503,9 @@ do
             ColorPicker.Destroyed = true
             StopAnimation()
 
-            if AnimationDropdown then
-                AnimationDropdown:Destroy()
-                AnimationDropdown = nil
-                Options[AnimationDropdownIdForCleanup] = nil
+            if AnimationMenu then
+                AnimationMenu:Destroy()
+                AnimationMenu = nil
             end
 
             if ColorPicker.Connections then
