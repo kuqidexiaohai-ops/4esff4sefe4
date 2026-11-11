@@ -5625,6 +5625,63 @@ do
             Parent = ContentHolder,
         })
 
+        local AnimationModeValues = { "无动画", "彩虹", "渐变", "渐变透明" }
+        local AnimationModeByName = {
+            ["无动画"] = "None",
+            ["彩虹"] = "Rainbow",
+            ["渐变"] = "Fade",
+            ["渐变透明"] = "Fade Alpha",
+        }
+        local AnimationMode = "None"
+        local AnimationConnection
+        local AnimationUpdating = false
+        local AnimationElapsed = 0
+        local AnimationBaseHue, AnimationBaseSaturation, AnimationBaseValue = ColorPicker.Value:ToHSV()
+        local AnimationBaseTransparency = ColorPicker.Transparency
+        local AnimationDropdown
+
+        local function StopAnimation()
+            if AnimationConnection then
+                AnimationConnection:Disconnect()
+                AnimationConnection = nil
+            end
+        end
+
+        local function StartAnimation()
+            StopAnimation()
+            if AnimationMode == "None" or ColorPicker.Destroyed or ParentObj.Disabled then
+                return
+            end
+
+            AnimationElapsed = 0
+            AnimationBaseHue, AnimationBaseSaturation, AnimationBaseValue = ColorPicker.Value:ToHSV()
+            AnimationBaseTransparency = ColorPicker.Transparency
+            AnimationConnection = RunService.RenderStepped:Connect(function(DeltaTime)
+                if ColorPicker.Destroyed or ParentObj.Disabled then
+                    return
+                end
+
+                AnimationElapsed += DeltaTime
+                local Hue = AnimationBaseHue
+                local Saturation = AnimationBaseSaturation
+                local Value = AnimationBaseValue
+                local Transparency = AnimationBaseTransparency
+                local Wave = (math.sin(AnimationElapsed * 2) + 1) / 2
+
+                if AnimationMode == "Rainbow" then
+                    Hue = (AnimationBaseHue + AnimationElapsed * 0.18) % 1
+                elseif AnimationMode == "Fade" then
+                    Value = AnimationBaseValue * (0.55 + 0.45 * Wave)
+                elseif AnimationMode == "Fade Alpha" and Info.Transparency then
+                    Transparency = Wave
+                end
+
+                AnimationUpdating = true
+                ColorPicker:SetValueRGB(Color3.fromHSV(Hue, Saturation, Value), Transparency)
+                AnimationUpdating = false
+            end)
+        end
+
         local FooterHeight = Library.IsMobile and 30 or 22
 
         local FooterBackground = New("Frame", {
@@ -5949,7 +6006,7 @@ do
         )
 
         local ContextMenu
-        ContextMenu = Library:AddContextMenu(Holder, UDim2.fromOffset(93, 0), function()
+        ContextMenu = Library:AddContextMenu(Holder, UDim2.fromOffset(180, 0), function()
             return { Holder.AbsoluteSize.X + 1.5, 0.5 }
         end, 1, function(Active: boolean)
             local Half = UDim.new(0, Library.CornerRadius / 2)
@@ -5970,6 +6027,46 @@ do
         end, false, "no_top_left")
         ColorPicker.ContextMenu = ContextMenu
         ContextMenu.List.Padding = UDim.new(0, 6)
+        local AnimationDropdownHolder = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 42),
+            Parent = ContextMenu.Menu,
+        })
+        local AnimationDropdownHost = {
+            Destroyed = false,
+            Type = "Groupbox",
+            Elements = {},
+            DependencyBoxes = {},
+            Container = AnimationDropdownHolder,
+            Parent = ColorPicker,
+            Resize = function() end,
+        }
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(0, 0),
+            Size = UDim2.new(1, 0, 0, 16),
+            Text = "动画效果",
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = AnimationDropdownHolder,
+        })
+        AnimationDropdownHost.Text = "动画效果"
+        AnimationDropdownHost.TextLabel = AnimationDropdownHolder
+        setmetatable(AnimationDropdownHost, BaseGroupbox)
+        local AnimationDropdownId = "ColorPickerAnimation_" .. tostring(ColorPicker)
+        AnimationDropdownHost:AddDropdown(AnimationDropdownId, {
+            Text = nil,
+            Values = AnimationModeValues,
+            Default = "无动画",
+            Callback = function(SelectedMode)
+                AnimationMode = AnimationModeByName[SelectedMode] or "None"
+                StartAnimation()
+            end,
+        })
+        AnimationDropdown = Options[AnimationDropdownId]
+        AnimationDropdown.Holder.Position = UDim2.fromOffset(0, 18)
+        AnimationDropdown.Holder.Size = UDim2.new(1, 0, 0, 21)
+        local AnimationDropdownIdForCleanup = AnimationDropdownId
         do
             local function CreateButton(Text, Func)
                 local Button = New("TextButton", {
@@ -6202,6 +6299,11 @@ do
             ColorPicker:Display()
 
             local Disabled = ParentObj.Disabled == true
+            if Disabled and AnimationConnection then
+                StopAnimation()
+            elseif not Disabled and AnimationMode ~= "None" and not AnimationConnection then
+                StartAnimation()
+            end
             ApplyHolderVisual(Disabled)
 
             if Disabled then
@@ -6214,7 +6316,9 @@ do
                 end
             end
 
-            ColorPicker:RunChanged()
+            if not AnimationUpdating then
+                ColorPicker:RunChanged()
+            end
         end
 
         function ColorPicker:OnChanged(Func)
@@ -6373,6 +6477,13 @@ do
 
         function ColorPicker:Destroy()
             ColorPicker.Destroyed = true
+            StopAnimation()
+
+            if AnimationDropdown then
+                AnimationDropdown:Destroy()
+                AnimationDropdown = nil
+                Options[AnimationDropdownIdForCleanup] = nil
+            end
 
             if ColorPicker.Connections then
                 for _, Connection in ColorPicker.Connections do
