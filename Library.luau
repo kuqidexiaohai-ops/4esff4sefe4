@@ -4579,13 +4579,13 @@ do
                 KeybindsToggle.State = State
 
                 if KeyPicker.Mode == "Press" then
-                    Label.TextTransparency = KeybindsToggle.Hidden and 1 or 0.4
+                    Label.TextTransparency = 0.4
                     SetIconProperties(CheckImage, { ImageTransparency = 1 })
                     return
                 end
 
-                Label.TextTransparency = KeybindsToggle.Hidden and 1 or (State and 0 or 0.5)
-                SetIconProperties(CheckImage, { ImageTransparency = KeybindsToggle.Hidden and 1 or (State and 0 or 1) })
+                Label.TextTransparency = State and 0 or 0.5
+                SetIconProperties(CheckImage, { ImageTransparency = State and 0 or 1 })
             end
 
             function KeybindsToggle:SetText(Text)
@@ -4596,11 +4596,11 @@ do
                 Visibility = Visibility ~= false
                 local IsPress = KeyPicker.Mode == "Press"
 
-                KeybindsToggle.Hidden = not Visibility
-                Holder.BackgroundTransparency = (not Visibility) and 1 or (IsPress and 0 or 1)
-                ButtonStroke.Enabled = Visibility and IsPress
-                Checkbox.Visible = Visibility and not KeybindsToggle.Normal
-                Holder.Active = Visibility and (not KeybindsToggle.Normal or IsPress)
+                Holder.Visible = Visibility
+                Holder.BackgroundTransparency = IsPress and 0 or 1
+                ButtonStroke.Enabled = IsPress
+                Checkbox.Visible = not KeybindsToggle.Normal
+                Holder.Active = not KeybindsToggle.Normal or IsPress
 
                 KeybindsToggle:Display(KeybindsToggle.State)
             end
@@ -4609,11 +4609,10 @@ do
                 KeybindsToggle.Normal = Normal
 
                 local IsPress = KeyPicker.Mode == "Press"
-                local IsHidden = KeybindsToggle.Hidden == true
-                Holder.Active = not IsHidden and (not Normal or IsPress)
-                Checkbox.Visible = not IsHidden and not Normal
-                ButtonStroke.Enabled = not IsHidden and IsPress
-                Holder.BackgroundTransparency = IsHidden and 1 or (IsPress and 0 or 1)
+                Holder.Active = not Normal or IsPress
+                Checkbox.Visible = not Normal
+                ButtonStroke.Enabled = IsPress
+                Holder.BackgroundTransparency = IsPress and 0 or 1
                 Holder.AutomaticSize = IsPress and Enum.AutomaticSize.X or Enum.AutomaticSize.None
                 Holder.Size = IsPress and UDim2.fromOffset(0, 20) or UDim2.new(1, 0, 0, 16)
                 ButtonPadding.PaddingLeft = UDim.new(0, IsPress and 8 or 0)
@@ -4642,13 +4641,13 @@ do
                 KeyPicker:Update()
             end))
             table.insert(KeyPicker.Connections, Holder.MouseEnter:Connect(function()
-                if KeyPicker.Mode == "Press" and not KeybindsToggle.Hidden and not ParentObj.Disabled then
+                if KeyPicker.Mode == "Press" and not ParentObj.Disabled then
                     Label.TextTransparency = 0
                 end
             end))
             table.insert(KeyPicker.Connections, Holder.MouseLeave:Connect(function()
                 if KeyPicker.Mode == "Press" then
-                    Label.TextTransparency = KeybindsToggle.Hidden and 1 or 0.4
+                    Label.TextTransparency = 0.4
                 end
             end))
 
