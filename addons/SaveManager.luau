@@ -340,7 +340,7 @@ end
 
 function SaveManager:IgnoreThemeSettings()
     SaveManager:SetIgnoreIndexes({
-        "BackgroundColor", "MainColor", "AccentColor", "OutlineColor", "FontColor", "ThemeManager_Transparency",
+        "BackgroundColor", "MainColor", "AccentColor", "OutlineColor", "FontColor", "ThemeManager_BackgroundTransparent",
         "ThemeManager_ThemeJSON", "ThemeManager_CustomThemeName", "ThemeManager_CustomThemeList"
     })
 end
