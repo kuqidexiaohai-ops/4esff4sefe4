@@ -246,13 +246,9 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local OutlineColor = CreateColorOption("描边色", "OutlineColor")
     local FontColor = CreateColorOption("字体颜色", "FontColor")
 
-    local TransparencyOption = Themesbox:AddSlider("ThemeManager_Transparency", {
-        Text = "菜单透明度",
-        Default = 100,
-        Min = 50,
-        Max = 100,
-        Rounding = 0,
-        Suffix = "%",
+    local TransparencyOption = Themesbox:AddToggle("ThemeManager_BackgroundTransparent", {
+        Text = "背景透明开启开关",
+        Default = false,
     })
 
     Themesbox:AddDivider()
@@ -335,13 +331,16 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         ThemeManager:ThemeUpdate()
     end
 
-    if ThemeManager.Library.Window then
-        ThemeManager.Library.Window:SetTransparency(TransparencyOption.Value / 100)
+    local function ApplyBackgroundTransparency(Enabled)
+        if ThemeManager.Library.Window then
+            ThemeManager.Library.Window:SetTransparency(Enabled and 0.5 or 1)
+        end
     end
 
-    TransparencyOption:OnChanged(function(Value)
+    TransparencyOption:OnChanged(ApplyBackgroundTransparency)
+    task.defer(function()
         if ThemeManager.Library.Window then
-            ThemeManager.Library.Window:SetTransparency(Value / 100)
+            ApplyBackgroundTransparency(TransparencyOption.Value)
         end
     end)
 
