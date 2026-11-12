@@ -590,6 +590,7 @@ local Templates = {
         Default = Color3.new(1, 1, 1),
 
         Resizable = true,
+        Animation = true,
 
         Callback = function() end,
         Changed = function() end,
@@ -5654,7 +5655,7 @@ do
 
         local function StartAnimation()
             StopAnimation()
-            if AnimationMode == "None" or ColorPicker.Destroyed or ParentObj.Disabled then
+            if Info.Animation == false or AnimationMode == "None" or ColorPicker.Destroyed or ParentObj.Disabled then
                 return
             end
 
@@ -6019,95 +6020,99 @@ do
             })
         )
 
-        local AnimationHolder = New("Frame", {
-            BackgroundTransparency = 1,
-            LayoutOrder = 2,
-            Size = UDim2.new(1, 0, 0, 46),
-            Parent = ContentHolder,
-        })
-        New("UIPadding", {
-            PaddingTop = UDim.new(0, 4),
-            Parent = AnimationHolder,
-        })
-        New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, 0),
-            Size = UDim2.new(1, 0, 0, 14),
-            Text = "动画效果",
-            TextSize = 13,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = AnimationHolder,
-        })
-        local AnimationButton = New("TextButton", {
-            AutoButtonColor = false,
-            BackgroundColor3 = "MainColor",
-            Size = UDim2.new(1, 0, 0, 22),
-            Position = UDim2.fromOffset(0, 18),
-            Text = "无动画",
-            TextSize = 13,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = AnimationHolder,
-        })
-        New("UIStroke", {
-            Color = "OutlineColor",
-            Parent = AnimationButton,
-        })
-        table.insert(
-            Library.Corners,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, Library.CornerRadius / 2),
-                Parent = AnimationButton,
+        if Info.Animation ~= false then
+            local AnimationHolder = New("Frame", {
+                BackgroundTransparency = 1,
+                LayoutOrder = 2,
+                Size = UDim2.new(1, 0, 0, 46),
+                Parent = ContentHolder,
             })
-        )
-        AnimationMenu = Library:AddContextMenu(AnimationButton, UDim2.fromOffset(120, 0), function()
-            return { 0, AnimationButton.AbsoluteSize.Y + 2 }
-        end, 1)
-        AnimationMenu.List.Padding = UDim.new(0, 3)
-        table.insert(ColorPicker.Connections, AnimationButton.MouseButton1Click:Connect(function()
-            if not ParentObj.Disabled then
-                AnimationMenu:Toggle()
-            end
-        end))
-
-        for _, ModeName in AnimationModeValues do
-            local ModeButton = New("TextButton", {
+            New("UIPadding", {
+                PaddingTop = UDim.new(0, 4),
+                Parent = AnimationHolder,
+            })
+            New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(0, 0),
+                Size = UDim2.new(1, 0, 0, 14),
+                Text = "动画效果",
+                TextSize = 13,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = AnimationHolder,
+            })
+            local AnimationButton = New("TextButton", {
                 AutoButtonColor = false,
                 BackgroundColor3 = "MainColor",
-                BackgroundTransparency = 1,
                 Size = UDim2.new(1, 0, 0, 22),
-                Text = ModeName,
-                TextSize = 14,
+                Position = UDim2.fromOffset(0, 18),
+                Text = "无动画",
+                TextSize = 13,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = AnimationMenu.Menu,
+                Parent = AnimationHolder,
             })
-            table.insert(ColorPicker.Connections, ModeButton.MouseButton1Click:Connect(function()
-                AnimationMode = AnimationModeByName[ModeName] or "None"
-                AnimationButton.Text = ModeName
-                StartAnimation()
-                AnimationMenu:Close()
+            New("UIStroke", {
+                Color = "OutlineColor",
+                Parent = AnimationButton,
+            })
+            table.insert(
+                Library.Corners,
+                New("UICorner", {
+                    CornerRadius = UDim.new(0, Library.CornerRadius / 2),
+                    Parent = AnimationButton,
+                })
+            )
+            AnimationMenu = Library:AddContextMenu(AnimationButton, UDim2.fromOffset(120, 0), function()
+                return { 0, AnimationButton.AbsoluteSize.Y + 2 }
+            end, 1)
+            AnimationMenu.List.Padding = UDim.new(0, 3)
+            table.insert(ColorPicker.Connections, AnimationButton.MouseButton1Click:Connect(function()
+                if not ParentObj.Disabled then
+                    AnimationMenu:Toggle()
+                end
             end))
-            table.insert(ColorPicker.Connections, ModeButton.MouseEnter:Connect(function()
-                TweenService:Create(ModeButton, Library.TweenInfo, {
-                    BackgroundTransparency = 0.7,
-                }):Play()
-            end))
-            table.insert(ColorPicker.Connections, ModeButton.MouseLeave:Connect(function()
-                TweenService:Create(ModeButton, Library.TweenInfo, {
-                    BackgroundTransparency = 1,
-                }):Play()
-            end))
-        end
 
-        table.insert(ColorPicker.Connections, AnimationButton.MouseEnter:Connect(function()
-            TweenService:Create(AnimationButton, Library.TweenInfo, {
-                BackgroundColor3 = Library:GetBetterColor(Library.Scheme.MainColor, 10),
-            }):Play()
-        end))
-        table.insert(ColorPicker.Connections, AnimationButton.MouseLeave:Connect(function()
-            TweenService:Create(AnimationButton, Library.TweenInfo, {
-                BackgroundColor3 = Library.Scheme.MainColor,
-            }):Play()
-        end))
+            for _, ModeName in AnimationModeValues do
+                local ModeButton = New("TextButton", {
+                    AutoButtonColor = false,
+                    BackgroundColor3 = "MainColor",
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 22),
+                    Text = ModeName,
+                    TextSize = 14,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = AnimationMenu.Menu,
+                })
+                table.insert(ColorPicker.Connections, ModeButton.MouseButton1Click:Connect(function()
+                    AnimationMode = AnimationModeByName[ModeName] or "None"
+                    AnimationButton.Text = ModeName
+                    StartAnimation()
+                    AnimationMenu:Close()
+                end))
+                table.insert(ColorPicker.Connections, ModeButton.MouseEnter:Connect(function()
+                    TweenService:Create(ModeButton, Library.TweenInfo, {
+                        BackgroundTransparency = 0.7,
+                    }):Play()
+                end))
+                table.insert(ColorPicker.Connections, ModeButton.MouseLeave:Connect(function()
+                    TweenService:Create(ModeButton, Library.TweenInfo, {
+                        BackgroundTransparency = 1,
+                    }):Play()
+                end))
+            end
+
+            table.insert(ColorPicker.Connections, AnimationButton.MouseEnter:Connect(function()
+                TweenService:Create(AnimationButton, Library.TweenInfo, {
+                    BackgroundColor3 = Library:GetBetterColor(Library.Scheme.MainColor, 10),
+                }):Play()
+            end))
+            table.insert(ColorPicker.Connections, AnimationButton.MouseLeave:Connect(function()
+                TweenService:Create(AnimationButton, Library.TweenInfo, {
+                    BackgroundColor3 = Library.Scheme.MainColor,
+                }):Play()
+            end))
+        else
+            AnimationMode = "None"
+        end
         local ActionHolder = New("Frame", {
             BackgroundTransparency = 1,
             LayoutOrder = 1,
@@ -6278,6 +6283,9 @@ do
 
             local Disabled = ParentObj.Disabled == true
             if Disabled and AnimationConnection then
+                StopAnimation()
+            elseif (Disabled or Info.Animation == false) and AnimationMode ~= "None" then
+                AnimationMode = "None"
                 StopAnimation()
             elseif not Disabled and AnimationMode ~= "None" and not AnimationConnection then
                 StartAnimation()
