@@ -11771,11 +11771,18 @@ function Library:CreateWindow(WindowInfo)
             VisibilityControl = false,
             Collapsed = false,
             SettingsOpen = false,
+            BackgroundTransparency = 0,
             Frame = KeybindFrame,
             Container = KeybindContainer,
             SettingsFrame = SettingsFrame,
             SettingsContainer = SettingsContainer,
         }
+
+        function KeybindMenu:SetBackgroundTransparency(Enabled: boolean)
+            KeybindMenu.BackgroundTransparency = if Enabled then 0.5 else 0
+            KeybindFrame.BackgroundTransparency = KeybindMenu.BackgroundTransparency
+            SettingsFrame.BackgroundTransparency = KeybindMenu.BackgroundTransparency
+        end
 
         function KeybindMenu:RefreshSettings()
             for _, Child in SettingsContainer:GetChildren() do
