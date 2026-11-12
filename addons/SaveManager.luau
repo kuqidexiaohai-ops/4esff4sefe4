@@ -340,8 +340,8 @@ end
 
 function SaveManager:IgnoreThemeSettings()
     SaveManager:SetIgnoreIndexes({
-        "BackgroundColor", "MainColor", "AccentColor", "OutlineColor", "FontColor", "BackgroundImage",
-        "ThemeManager_ThemeJSON"
+        "BackgroundColor", "MainColor", "AccentColor", "OutlineColor", "FontColor", "ThemeManager_Transparency",
+        "ThemeManager_ThemeJSON", "ThemeManager_CustomThemeName", "ThemeManager_CustomThemeList"
     })
 end
 
@@ -798,12 +798,11 @@ local function ShowDialog(
     })
 end
 
-function SaveManager:BuildConfigSection(Tab: any, IconName: string)
+function SaveManager:BuildConfigSection(Tab: any)
     assert(SaveManager.Library, "Library is not set, call SaveManager:SetLibrary(Library) first.")
     local ConfigurationBox = Tab:AddGroupbox({
         Side = "Right",
         Name = "配置",
-        IconName = IconName or "folder-cog",
     })
 
     local ConfigNameInput, ConfigList, ConfigJSONInput, AutoloadConfigLabel
