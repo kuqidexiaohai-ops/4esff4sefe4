@@ -6043,7 +6043,7 @@ do
             BackgroundColor3 = "MainColor",
             Size = UDim2.new(1, 0, 0, 22),
             Position = UDim2.fromOffset(0, 18),
-            Text = "无动画  v",
+            Text = "无动画",
             TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             Parent = AnimationHolder,
@@ -6082,7 +6082,7 @@ do
             })
             table.insert(ColorPicker.Connections, ModeButton.MouseButton1Click:Connect(function()
                 AnimationMode = AnimationModeByName[ModeName] or "None"
-                AnimationButton.Text = ModeName .. "  v"
+                AnimationButton.Text = ModeName
                 StartAnimation()
                 AnimationMenu:Close()
             end))
@@ -11974,12 +11974,11 @@ function Library:CreateWindow(WindowInfo)
                 Parent = MainFrame,
             })
         )
-        table.insert(
-            Library.Scales,
-            New("UIScale", {
-                Parent = MainFrame,
-            })
-        )
+        local MainScale = New("UIScale", {
+            Parent = MainFrame,
+        })
+        table.insert(Library.Scales, MainScale)
+        Window.MainScale = MainScale
         Library:AddOutline(MainFrame)
         Library:MakeLine(MainFrame, {
             Position = UDim2.fromOffset(0, 48),
