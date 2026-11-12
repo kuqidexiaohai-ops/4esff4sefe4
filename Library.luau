@@ -1459,6 +1459,10 @@ function Library:UpdateColorsUsingRegistry()
             end
         end
     end
+
+    if Library.Window and Library.Window.ApplyTransparency then
+        Library.Window:ApplyTransparency()
+    end
 end
 
 function Library:SetDPIScale(DPIScale: number)
@@ -12346,6 +12350,112 @@ function Library:CreateWindow(WindowInfo)
 
     local Window = {}
     local Fading = false
+    local WindowOpacity = 1
+    local TransparencyBases = setmetatable({}, { __mode = "k" })
+    local TransparencyTweens = setmetatable({}, { __mode = "k" })
+
+    local function ApplyWindowOpacity()
+        if not MainFrame then
+            return
+        end
+
+        if WindowOpacity >= 1 then
+            for Instance, BaseValues in TransparencyBases do
+                if Instance.Parent then
+                    for Property, Base in BaseValues do
+                        local Tweens = TransparencyTweens[Instance]
+                        local ExistingTween = Tweens and Tweens[Property]
+                        if ExistingTween then
+                            ExistingTween:Cancel()
+                        end
+
+                        local SuccessTween, Tween = pcall(function()
+                            return TweenService:Create(Instance, Library.TweenInfo, {
+                                [Property] = Base,
+                            })
+                        end)
+                        if SuccessTween then
+                            Tweens[Property] = Tween
+                            Tween:Play()
+                        end
+                    end
+                end
+            end
+            return
+        end
+
+        local OpacityScale = WindowOpacity
+        local function ApplyToInstance(Instance)
+            local Properties = {}
+            if Instance:IsA("GuiObject") then
+                Properties.BackgroundTransparency = true
+            end
+            if Instance:IsA("TextLabel") or Instance:IsA("TextButton") or Instance:IsA("TextBox") then
+                Properties.TextTransparency = true
+                Properties.TextStrokeTransparency = true
+            end
+            if Instance:IsA("ImageLabel") or Instance:IsA("ImageButton") then
+                Properties.ImageTransparency = true
+            end
+            if Instance:IsA("UIStroke") then
+                Properties.Transparency = true
+            end
+
+            for Property in Properties do
+                local Success, Current = pcall(function()
+                    return Instance[Property]
+                end)
+                if not Success or typeof(Current) ~= "number" then
+                    continue
+                end
+
+                local BaseValues = TransparencyBases[Instance]
+                if not BaseValues then
+                    BaseValues = {}
+                    TransparencyBases[Instance] = BaseValues
+                end
+                if BaseValues[Property] == nil then
+                    BaseValues[Property] = Current
+                end
+
+                local Base = BaseValues[Property]
+                local Target = 1 - (1 - Base) * OpacityScale
+                local Tweens = TransparencyTweens[Instance]
+                if not Tweens then
+                    Tweens = {}
+                    TransparencyTweens[Instance] = Tweens
+                end
+
+                local ExistingTween = Tweens[Property]
+                if ExistingTween then
+                    ExistingTween:Cancel()
+                end
+
+                local SuccessTween, Tween = pcall(function()
+                    return TweenService:Create(Instance, Library.TweenInfo, {
+                        [Property] = Target,
+                    })
+                end)
+                if SuccessTween then
+                    Tweens[Property] = Tween
+                    Tween:Play()
+                end
+            end
+        end
+
+        for _, Instance in MainFrame:GetDescendants() do
+            ApplyToInstance(Instance)
+        end
+        ApplyToInstance(MainFrame)
+    end
+
+    Library:GiveSignal(MainFrame.DescendantAdded:Connect(function(Instance)
+        task.defer(function()
+            if Instance.Parent and MainFrame then
+                ApplyWindowOpacity()
+            end
+        end)
+    end))
 
     local function SetUICorner(UICorner, Corner, HalfValue)
         local Current = UICorner[Corner]
@@ -12354,6 +12464,16 @@ function Library:CreateWindow(WindowInfo)
         end
 
         UICorner[Corner] = HalfValue
+    end
+
+    function Window:ApplyTransparency()
+        ApplyWindowOpacity()
+    end
+
+    function Window:SetTransparency(Opacity: number)
+        assert(typeof(Opacity) == "number", "Opacity 应为数字")
+        WindowOpacity = math.clamp(Opacity, 0.5, 1)
+        ApplyWindowOpacity()
     end
 
     function Window:ChangeTitle(title)
@@ -15753,6 +15873,7 @@ function Library:CreateWindow(WindowInfo)
 
     Window.MainFrame = MainFrame
     Library.Window = Window
+    ApplyWindowOpacity()
 
     return Window
 end
