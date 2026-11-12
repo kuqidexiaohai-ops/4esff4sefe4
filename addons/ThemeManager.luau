@@ -1,9 +1,11 @@
 local HttpService: HttpService = game:GetService("HttpService")
 
 local SchemeIndexes = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor" }
+local DefaultFolder = "ObsidianLibSettings"
 
 local ThemeManager = {
     Library = nil,
+    Folder = DefaultFolder,
     AppliedToTab = false
 }
 
@@ -30,14 +32,49 @@ local function IsValidThemeData(Data: any): boolean
         end
     end
 
-    return Data.BackgroundImage == nil or typeof(Data.BackgroundImage) == "string"
+    return true
+end
+
+local function GetThemesPath(): string?
+    if IsStringEmpty(ThemeManager.Folder) then
+        return nil
+    end
+
+    return string.format("%s/themes", ThemeManager.Folder)
+end
+
+local function EnsureThemesFolder(): string?
+    local ThemesPath = GetThemesPath()
+    if not ThemesPath then
+        return nil
+    end
+
+    local CurrentPath = ""
+    for Part in string.gmatch(ThemeManager.Folder, "[^/]+") do
+        CurrentPath = if CurrentPath == "" then Part else CurrentPath .. "/" .. Part
+        if not isfolder(CurrentPath) then
+            pcall(makefolder, CurrentPath)
+        end
+    end
+    if not isfolder(ThemesPath) then
+        pcall(makefolder, ThemesPath)
+    end
+
+    return ThemesPath
+end
+
+local function GetThemePath(ThemeName: string): string?
+    local ThemesPath = EnsureThemesFolder()
+    if not ThemesPath then
+        return nil
+    end
+
+    return string.format("%s/%s.json", ThemesPath, ThemeName)
 end
 
 local function BuildCurrentThemeData(): {[string]: any}
     local Library = ThemeManager.Library
-    local ThemeData = {
-        BackgroundImage = Library.Options.BackgroundImage.Value
-    }
+    local ThemeData = {}
 
     for _, SchemeIndex in SchemeIndexes do
         ThemeData[SchemeIndex] = Library.Options[SchemeIndex].Value:ToHex()
@@ -59,6 +96,80 @@ function ThemeManager:ThemeUpdate()
     Library:UpdateColorsUsingRegistry()
 end
 
+function ThemeManager:SetFolder(Folder: string)
+    assert(typeof(Folder) == "string" and not IsStringEmpty(Folder), "主题文件夹路径无效")
+    ThemeManager.Folder = Folder
+    EnsureThemesFolder()
+end
+
+function ThemeManager:ReloadCustomThemes(): {string}
+    local ThemesPath = EnsureThemesFolder()
+    if not ThemesPath then
+        return {}
+    end
+
+    local Success, Files = pcall(listfiles, ThemesPath)
+    if not Success or typeof(Files) ~= "table" then
+        return {}
+    end
+
+    local Names = {}
+    for _, FilePath in Files do
+        local Name = tostring(FilePath):gsub("\\\\", "/"):match("([^/]+)%.json$")
+        if Name then
+            table.insert(Names, Name)
+        end
+    end
+    table.sort(Names)
+    return Names
+end
+
+function ThemeManager:GetCustomTheme(ThemeName: string): any
+    local Path = GetThemePath(ThemeName)
+    if not Path or not isfile(Path) then
+        return nil
+    end
+
+    local Success, Content = pcall(readfile, Path)
+    if not Success then
+        return nil
+    end
+
+    local DecodedSuccess, Data = pcall(HttpService.JSONDecode, HttpService, Content)
+    return DecodedSuccess and IsValidThemeData(Data) and Data or nil
+end
+
+function ThemeManager:SaveCustomTheme(ThemeName: string): (boolean, string?)
+    if IsStringEmpty(ThemeName) or ThemeName:find("[/\\\\]") then
+        return false, "主题名称无效"
+    end
+
+    local Path = GetThemePath(ThemeName)
+    if not Path then
+        return false, "主题目录无效"
+    end
+
+    local Content, Success, ErrorMessage = ThemeManager:SaveJSON()
+    if not Success then
+        return false, ErrorMessage
+    end
+
+    local WriteSuccess, WriteError = pcall(writefile, Path, Content)
+    if not WriteSuccess then
+        return false, tostring(WriteError)
+    end
+
+    return true
+end
+
+function ThemeManager:ApplyTheme(ThemeName: string): (boolean, string?)
+    local Data = ThemeManager:GetCustomTheme(ThemeName)
+    if not Data then
+        return false, "找不到该主题配置"
+    end
+    return ThemeManager:ApplyThemeData(Data)
+end
+
 function ThemeManager:ApplyThemeData(ThemeData: any): (boolean, string?)
     if typeof(ThemeData) ~= "table" then
         return false, "主题数据无效"
@@ -74,11 +185,7 @@ function ThemeManager:ApplyThemeData(ThemeData: any): (boolean, string?)
         local Element = Library.Options[Index]
         local FinalValue = Value
 
-        if Index == "BackgroundImage" then
-            if typeof(Value) ~= "string" then continue end
-            ThemeManager.Library:SetBackgroundImage(Value)
-
-        elseif table.find(SchemeIndexes, Index) then
+        if table.find(SchemeIndexes, Index) then
             local SuccessColor, Color = pcall(Color3.fromHex, Value)
             if not SuccessColor then continue end
 
@@ -139,14 +246,57 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local OutlineColor = CreateColorOption("描边色", "OutlineColor")
     local FontColor = CreateColorOption("字体颜色", "FontColor")
 
-    Themesbox:AddInput("BackgroundImage", {
-        Text = "背景图片",
-        Default = "",
-        Finished = true,
-        ClearTextOnFocus = false,
-        ClearTextOnBlur = false
+    local TransparencyOption = Themesbox:AddSlider("ThemeManager_Transparency", {
+        Text = "菜单透明度",
+        Default = 100,
+        Min = 50,
+        Max = 100,
+        Rounding = 0,
+        Suffix = "%",
     })
 
+    Themesbox:AddDivider()
+    Themesbox:AddInput("ThemeManager_CustomThemeName", { Text = "主题配置名称" })
+    local CustomThemeNameInput = ThemeManager.Library.Options.ThemeManager_CustomThemeName
+    local CustomThemeList = Themesbox:AddDropdown("ThemeManager_CustomThemeList", {
+        Text = "主题列表选择",
+        Values = ThemeManager:ReloadCustomThemes(),
+        AllowNull = true,
+        Multi = false,
+    })
+
+    local function RefreshThemeList()
+        CustomThemeList:SetValues(ThemeManager:ReloadCustomThemes())
+        CustomThemeList:SetValue(nil)
+    end
+
+    Themesbox:AddButton("创建主题配置", function()
+        local Name = CustomThemeNameInput.Value
+        if IsStringEmpty(Name) or Name:find("[/\\\\]") then
+            ThemeManager.Library:Notify("主题配置名称无效")
+            return
+        end
+
+        local Success, ErrorMessage = ThemeManager:SaveCustomTheme(Name)
+        if not Success then
+            ThemeManager.Library:Notify(string.format("创建主题配置失败：%s", tostring(ErrorMessage)))
+            return
+        end
+
+        ThemeManager.Library:Notify("主题配置已创建：" .. Name)
+        RefreshThemeList()
+    end)
+
+    CustomThemeList:OnChanged(function(Name)
+        if not IsStringEmpty(Name) then
+            local Success, ErrorMessage = ThemeManager:ApplyTheme(Name)
+            if not Success then
+                ThemeManager.Library:Notify(string.format("加载主题失败：%s", tostring(ErrorMessage)))
+            end
+        end
+    end)
+
+    Themesbox:AddButton("刷新主题列表", RefreshThemeList)
     Themesbox:AddDivider()
     Themesbox:AddInput("ThemeManager_ThemeJSON", { Text = "主题 JSON" })
 
@@ -185,14 +335,21 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         ThemeManager:ThemeUpdate()
     end
 
+    if ThemeManager.Library.Window then
+        ThemeManager.Library.Window:SetTransparency(TransparencyOption.Value / 100)
+    end
+
+    TransparencyOption:OnChanged(function(Value)
+        if ThemeManager.Library.Window then
+            ThemeManager.Library.Window:SetTransparency(Value / 100)
+        end
+    end)
+
     BackgroundColor:OnChanged(UpdateTheme)
     MainColor:OnChanged(UpdateTheme)
     AccentColor:OnChanged(UpdateTheme)
     OutlineColor:OnChanged(UpdateTheme)
     FontColor:OnChanged(UpdateTheme)
-    ThemeManager.Library.Options.BackgroundImage:OnChanged(function(Value)
-        ThemeManager.Library:SetBackgroundImage(Value)
-    end)
 
     ThemeManager.AppliedToTab = true
     return Themesbox
