@@ -234,7 +234,8 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
 
     local function CreateColorOption(Text, SchemeIndex)
         Themesbox:AddLabel(Text):AddColorPicker(SchemeIndex, {
-            Default = ThemeManager.Library.Scheme[SchemeIndex]
+            Default = ThemeManager.Library.Scheme[SchemeIndex],
+            Animation = false,
         })
 
         return ThemeManager.Library.Options[SchemeIndex]
@@ -252,7 +253,10 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     })
 
     Themesbox:AddDivider()
-    Themesbox:AddInput("ThemeManager_CustomThemeName", { Text = "主题配置名称" })
+    Themesbox:AddInput("ThemeManager_CustomThemeName", {
+        Text = "自定义主题名称",
+        Placeholder = "输入名称后创建主题",
+    })
     local CustomThemeNameInput = ThemeManager.Library.Options.ThemeManager_CustomThemeName
     local CustomThemeList = Themesbox:AddDropdown("ThemeManager_CustomThemeList", {
         Text = "主题列表选择",
@@ -266,7 +270,7 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         CustomThemeList:SetValue(nil)
     end
 
-    Themesbox:AddButton("创建主题配置", function()
+    Themesbox:AddButton("创建主题", function()
         local Name = CustomThemeNameInput.Value
         if IsStringEmpty(Name) or Name:find("[/\\\\]") then
             ThemeManager.Library:Notify("主题配置名称无效")
