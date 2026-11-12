@@ -5681,8 +5681,17 @@ do
                 end
 
                 AnimationUpdating = true
-                ColorPicker:SetValueRGB(Color3.fromHSV(Hue, Saturation, Value), Transparency)
+                local Success = pcall(function()
+                    if AnimationMode == "Fade Alpha" and Info.Transparency then
+                        ColorPicker:SetValueRGB(Color3.fromHSV(Hue, Saturation, Value), Transparency)
+                    else
+                        ColorPicker:SetValueRGB(Color3.fromHSV(Hue, Saturation, Value))
+                    end
+                end)
                 AnimationUpdating = false
+                if not Success then
+                    StopAnimation()
+                end
             end)
         end
 
@@ -6009,46 +6018,43 @@ do
             })
         )
 
-        local ContextMenu
-        ContextMenu = Library:AddContextMenu(Holder, UDim2.fromOffset(93, 0), function()
-            return { Holder.AbsoluteSize.X + 1.5, 0.5 }
-        end, 1, function(Active: boolean)
-            local Half = UDim.new(0, Library.CornerRadius / 2)
-            local Zero = UDim.new(0, 0)
-
-            ColorPickerCorner.TopLeftRadius = Half
-            ColorPickerCorner.BottomLeftRadius = Half
-            ColorPickerCorner.TopRightRadius = Active and Zero or Half
-            ColorPickerCorner.BottomRightRadius = Active and Zero or Half
-
-            local MenuCorner = ContextMenu and ContextMenu.Corner
-            if MenuCorner then
-                MenuCorner.TopLeftRadius = Zero
-                MenuCorner.TopRightRadius = Half
-                MenuCorner.BottomRightRadius = Half
-                MenuCorner.BottomLeftRadius = Half
-            end
-        end, false, "no_top_left")
-        ColorPicker.ContextMenu = ContextMenu
-        ContextMenu.List.Padding = UDim.new(0, 6)
+        local AnimationHolder = New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 34),
+            Parent = ContentHolder,
+        })
+        New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 14),
+            Text = "动画效果",
+            TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = AnimationHolder,
+        })
         local AnimationButton = New("TextButton", {
             AutoButtonColor = false,
             BackgroundColor3 = "MainColor",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 21),
-            Text = "动画效果：无动画  ›",
-            TextSize = 14,
+            Size = UDim2.new(1, 0, 0, 20),
+            Position = UDim2.fromOffset(0, 14),
+            Text = "无动画  v",
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = ContextMenu.Menu,
+            Parent = AnimationHolder,
         })
-        AnimationMenu = Library:AddContextMenu(
-            AnimationButton,
-            UDim2.fromOffset(128, 0),
-            function()
-                return { AnimationButton.AbsoluteSize.X + 5, 0 }
-            end,
-            1
+        New("UIStroke", {
+            Color = "OutlineColor",
+            Parent = AnimationButton,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Library.CornerRadius / 2),
+                Parent = AnimationButton,
+            })
         )
+        AnimationMenu = Library:AddContextMenu(AnimationButton, UDim2.fromOffset(120, 0), function()
+            return { 0, AnimationButton.AbsoluteSize.Y + 2 }
+        end, 1)
         AnimationMenu.List.Padding = UDim.new(0, 3)
         table.insert(ColorPicker.Connections, AnimationButton.MouseButton1Click:Connect(function()
             if not ParentObj.Disabled then
@@ -6069,7 +6075,7 @@ do
             })
             table.insert(ColorPicker.Connections, ModeButton.MouseButton1Click:Connect(function()
                 AnimationMode = AnimationModeByName[ModeName] or "None"
-                AnimationButton.Text = "动画效果：" .. ModeName .. "  ›"
+                AnimationButton.Text = ModeName .. "  v"
                 StartAnimation()
                 AnimationMenu:Close()
             end))
@@ -6087,12 +6093,12 @@ do
 
         table.insert(ColorPicker.Connections, AnimationButton.MouseEnter:Connect(function()
             TweenService:Create(AnimationButton, Library.TweenInfo, {
-                BackgroundTransparency = 0.7,
+                BackgroundColor3 = Library:GetBetterColor(Library.Scheme.MainColor, 10),
             }):Play()
         end))
         table.insert(ColorPicker.Connections, AnimationButton.MouseLeave:Connect(function()
             TweenService:Create(AnimationButton, Library.TweenInfo, {
-                BackgroundTransparency = 1,
+                BackgroundColor3 = Library.Scheme.MainColor,
             }):Play()
         end))
         local ActionHolder = New("Frame", {
@@ -6270,14 +6276,8 @@ do
             end
             ApplyHolderVisual(Disabled)
 
-            if Disabled then
-                if ColorMenu.Active then
-                    ColorMenu:Close()
-                end
-
-                if ContextMenu.Active then
-                    ContextMenu:Close()
-                end
+            if Disabled and ColorMenu.Active then
+                ColorMenu:Close()
             end
 
             if not AnimationUpdating then
@@ -6313,14 +6313,6 @@ do
             end
 
             ColorMenu:Toggle()
-        end))
-
-        table.insert(ColorPicker.Connections, Holder.MouseButton2Click:Connect(function()
-            if ParentObj.Disabled then
-                return
-            end
-
-            ContextMenu:Toggle()
         end))
 
         table.insert(ColorPicker.Connections, SatVipMap.InputBegan:Connect(function(Input: InputObject)
@@ -6460,10 +6452,6 @@ do
 
             if ResizeGrabber then
                 ResizeGrabber:Destroy()
-            end
-
-            if ContextMenu then
-                ContextMenu:Destroy()
             end
 
             if Holder then
@@ -11680,6 +11668,9 @@ function Library:CreateWindow(WindowInfo)
     Library.TabSwipeFrom = WindowInfo.TabSwipeFrom or "right"
 
     local IsDefaultSearchbarSize = WindowInfo.SearchbarSize == UDim2.fromScale(1, 1)
+    local SearchUsesDefaultLayout = IsDefaultSearchbarSize
+    local SearchFullSize = UDim2.new(1, -36, 1, 0)
+    local SearchCompactSize = UDim2.new(0.5, -36, 1, 0)
     local MainFrame
     local DividerLine
     local TitleHolder
@@ -12162,7 +12153,7 @@ function Library:CreateWindow(WindowInfo)
         SearchBox = New("TextBox", {
             BackgroundColor3 = "MainColor",
             PlaceholderText = "搜索",
-            Size = WindowInfo.SearchbarSize,
+            Size = WindowInfo.DisableSearch and WindowInfo.SearchbarSize or SearchFullSize,
             TextScaled = true,
             Visible = not (WindowInfo.DisableSearch or false),
             Parent = RightWrapper,
@@ -12190,6 +12181,60 @@ function Library:CreateWindow(WindowInfo)
             Parent = SearchBox,
         })
 
+        local SearchIcon = Library:GetIcon("search")
+        local SidebarIcon = Library:GetIcon("panel-left-close") or Library:GetIcon("panel-left")
+        local SidebarToggleButton
+        if SidebarIcon then
+            SidebarToggleButton = New("ImageButton", {
+                AutoButtonColor = false,
+                BackgroundColor3 = "MainColor",
+                Size = UDim2.fromOffset(28, 28),
+                Parent = RightWrapper,
+            })
+            Library:CreateIcon(SidebarIcon, {
+                ImageColor3 = "FontColor",
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.fromScale(0.5, 0.5),
+                Size = UDim2.fromOffset(18, 18),
+                Parent = SidebarToggleButton,
+            })
+        else
+            SidebarToggleButton = New("TextButton", {
+                AutoButtonColor = false,
+                BackgroundColor3 = "MainColor",
+                Text = "☷",
+                TextColor3 = "FontColor",
+                TextSize = 18,
+                Size = UDim2.fromOffset(28, 28),
+                Parent = RightWrapper,
+            })
+        end
+        local SidebarToggleStroke = New("UIStroke", {
+            Color = "OutlineColor",
+            Parent = SidebarToggleButton,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, WindowInfo.CornerRadius),
+                Parent = SidebarToggleButton,
+            })
+        )
+        Library:GiveSignal(SidebarToggleButton.MouseButton1Click:Connect(function()
+            Window:SetCompact(not Window:IsSidebarCompacted())
+        end))
+        Library:GiveSignal(SidebarToggleButton.MouseEnter:Connect(function()
+            TweenService:Create(SidebarToggleButton, Library.TweenInfo, {
+                BackgroundColor3 = Library:GetBetterColor(Library.Scheme.MainColor, 10),
+            }):Play()
+        end))
+        Library:GiveSignal(SidebarToggleButton.MouseLeave:Connect(function()
+            TweenService:Create(SidebarToggleButton, Library.TweenInfo, {
+                BackgroundColor3 = Library.Scheme.MainColor,
+            }):Play()
+        end))
+        Library:AddToRegistry(SidebarToggleStroke, { Color = "OutlineColor" })
+
         Library:GiveSignal(SearchBox.Focused:Connect(function()
             Library.Registry[SearchBoxStroke].Color = "AccentColor"
             TweenService:Create(SearchBoxStroke, Library.TweenInfo, {
@@ -12204,7 +12249,6 @@ function Library:CreateWindow(WindowInfo)
             }):Play()
         end))
 
-        local SearchIcon = Library:GetIcon("search")
         if SearchIcon then
             Library:CreateIcon(SearchIcon, {
                 ImageColor3 = "FontColor",
@@ -12355,52 +12399,16 @@ function Library:CreateWindow(WindowInfo)
     local TransparencyTweens = setmetatable({}, { __mode = "k" })
 
     local function ApplyWindowOpacity()
-        if not MainFrame then
-            return
-        end
-
-        if WindowOpacity >= 1 then
-            for Instance, BaseValues in TransparencyBases do
-                if Instance.Parent then
-                    for Property, Base in BaseValues do
-                        local Tweens = TransparencyTweens[Instance]
-                        local ExistingTween = Tweens and Tweens[Property]
-                        if ExistingTween then
-                            ExistingTween:Cancel()
-                        end
-
-                        local SuccessTween, Tween = pcall(function()
-                            return TweenService:Create(Instance, Library.TweenInfo, {
-                                [Property] = Base,
-                            })
-                        end)
-                        if SuccessTween then
-                            Tweens[Property] = Tween
-                            Tween:Play()
-                        end
-                    end
-                end
-            end
+        if not MainFrame or not Tabs or not Container then
             return
         end
 
         local OpacityScale = WindowOpacity
         local function ApplyToInstance(Instance)
             local Properties = {}
-            if Instance:IsA("GuiObject") then
+            if Instance == MainFrame or Instance == Tabs or Instance == Container then
                 Properties.BackgroundTransparency = true
             end
-            if Instance:IsA("TextLabel") or Instance:IsA("TextButton") or Instance:IsA("TextBox") then
-                Properties.TextTransparency = true
-                Properties.TextStrokeTransparency = true
-            end
-            if Instance:IsA("ImageLabel") or Instance:IsA("ImageButton") then
-                Properties.ImageTransparency = true
-            end
-            if Instance:IsA("UIStroke") then
-                Properties.Transparency = true
-            end
-
             for Property in Properties do
                 local Success, Current = pcall(function()
                     return Instance[Property]
@@ -12443,15 +12451,14 @@ function Library:CreateWindow(WindowInfo)
             end
         end
 
-        for _, Instance in MainFrame:GetDescendants() do
-            ApplyToInstance(Instance)
-        end
         ApplyToInstance(MainFrame)
+        ApplyToInstance(Tabs)
+        ApplyToInstance(Container)
     end
 
     Library:GiveSignal(MainFrame.DescendantAdded:Connect(function(Instance)
         task.defer(function()
-            if Instance.Parent and MainFrame then
+            if Instance.Parent and MainFrame and WindowOpacity < 1 then
                 ApplyWindowOpacity()
             end
         end)
@@ -12719,7 +12726,11 @@ function Library:CreateWindow(WindowInfo)
     end
 
     function Window:SetCompact(State)
+        if not WindowInfo.EnableCompacting then
+            WindowInfo.EnableCompacting = true
+        end
         Window:SetSidebarWidth(State and WindowInfo.SidebarCompactWidth or LastExpandedWidth)
+        ApplyCompact()
     end
 
     function Window:GetSidebarWidth()
@@ -12741,7 +12752,7 @@ function Library:CreateWindow(WindowInfo)
         end
 
         RefreshWindowTitleSize()
-        if not IsCompact then
+        if not IsCompact and Width ~= WindowInfo.SidebarCompactWidth then
             LastExpandedWidth = Width
         end
     end
@@ -12752,16 +12763,16 @@ function Library:CreateWindow(WindowInfo)
         CurrentTabDescription.Text = Description or ""
         CurrentTabDescription.Visible = typeof(Description) == "string" and Description ~= ""
 
-        if IsDefaultSearchbarSize then
-            SearchBox.Size = UDim2.fromScale(0.5, 1)
+        if SearchUsesDefaultLayout then
+            SearchBox.Size = SearchCompactSize
         end
         CurrentTabInfo.Visible = true
     end
 
     function Window:HideTabInfo()
         CurrentTabInfo.Visible = false
-        if IsDefaultSearchbarSize then
-            SearchBox.Size = UDim2.fromScale(1, 1)
+        if SearchUsesDefaultLayout then
+            SearchBox.Size = SearchFullSize
         end
     end
 
