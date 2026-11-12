@@ -247,7 +247,7 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local FontColor = CreateColorOption("字体颜色", "FontColor")
 
     local TransparencyOption = Themesbox:AddToggle("ThemeManager_BackgroundTransparent", {
-        Text = "背景透明开启开关",
+        Text = "背景透明",
         Default = false,
     })
 
