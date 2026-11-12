@@ -5619,6 +5619,7 @@ do
         })
         New("UIListLayout", {
             Padding = UDim.new(0, 8),
+            SortOrder = Enum.SortOrder.LayoutOrder,
             Parent = ContentHolder,
         })
         New("UIPadding", {
@@ -6020,11 +6021,17 @@ do
 
         local AnimationHolder = New("Frame", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 34),
+            LayoutOrder = 2,
+            Size = UDim2.new(1, 0, 0, 46),
             Parent = ContentHolder,
+        })
+        New("UIPadding", {
+            PaddingTop = UDim.new(0, 4),
+            Parent = AnimationHolder,
         })
         New("TextLabel", {
             BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(0, 0),
             Size = UDim2.new(1, 0, 0, 14),
             Text = "动画效果",
             TextSize = 13,
@@ -6034,8 +6041,8 @@ do
         local AnimationButton = New("TextButton", {
             AutoButtonColor = false,
             BackgroundColor3 = "MainColor",
-            Size = UDim2.new(1, 0, 0, 20),
-            Position = UDim2.fromOffset(0, 14),
+            Size = UDim2.new(1, 0, 0, 22),
+            Position = UDim2.fromOffset(0, 18),
             Text = "无动画  v",
             TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
@@ -6103,6 +6110,7 @@ do
         end))
         local ActionHolder = New("Frame", {
             BackgroundTransparency = 1,
+            LayoutOrder = 1,
             Size = UDim2.new(1, 0, 0, 20),
             Parent = ContentHolder,
         })
@@ -10987,6 +10995,7 @@ do
                 Visible = false,
                 Parent = BoxHolder,
             })
+            DepGroupboxContainer:SetAttribute("ObsidianTransparentBackground", true)
             table.insert(
                 Library.Corners,
                 New("UICorner", {
@@ -11678,6 +11687,7 @@ function Library:CreateWindow(WindowInfo)
     local WindowIcon
     local RightWrapper
     local SearchBox
+    local Window = {}
     local CurrentTabInfo
     local CurrentTabLabel
     local CurrentTabDescription
@@ -12392,7 +12402,6 @@ function Library:CreateWindow(WindowInfo)
         Library.WindowContainer = Container
     end
 
-    local Window = {}
     local Fading = false
     local WindowOpacity = 1
     local TransparencyBases = setmetatable({}, { __mode = "k" })
@@ -12406,7 +12415,7 @@ function Library:CreateWindow(WindowInfo)
         local OpacityScale = WindowOpacity
         local function ApplyToInstance(Instance)
             local Properties = {}
-            if Instance == MainFrame or Instance == Tabs or Instance == Container then
+            if Instance == MainFrame or Instance == Tabs or Instance == Container or Instance:GetAttribute("ObsidianTransparentBackground") == true then
                 Properties.BackgroundTransparency = true
             end
             for Property in Properties do
@@ -12454,6 +12463,11 @@ function Library:CreateWindow(WindowInfo)
         ApplyToInstance(MainFrame)
         ApplyToInstance(Tabs)
         ApplyToInstance(Container)
+        for _, Instance in MainFrame:GetDescendants() do
+            if Instance:GetAttribute("ObsidianTransparentBackground") == true then
+                ApplyToInstance(Instance)
+            end
+        end
     end
 
     Library:GiveSignal(MainFrame.DescendantAdded:Connect(function(Instance)
@@ -12726,10 +12740,14 @@ function Library:CreateWindow(WindowInfo)
     end
 
     function Window:SetCompact(State)
-        if not WindowInfo.EnableCompacting then
-            WindowInfo.EnableCompacting = true
-        end
-        Window:SetSidebarWidth(State and WindowInfo.SidebarCompactWidth or LastExpandedWidth)
+        WindowInfo.EnableCompacting = true
+        local CompactWidth = math.min(
+            WindowInfo.SidebarCompactWidth,
+            MainFrame.AbsoluteSize.X / Library.DPIScale - WindowInfo.MinContainerWidth - 1
+        )
+        CompactWidth = math.max(48, CompactWidth)
+        WindowInfo.SidebarCompactWidth = CompactWidth
+        Window:SetSidebarWidth(State and CompactWidth or LastExpandedWidth)
         ApplyCompact()
     end
 
@@ -13337,6 +13355,7 @@ function Library:CreateWindow(WindowInfo)
                     Size = UDim2.fromScale(1, 0),
                     Parent = BoxHolder,
                 })
+                TabboxHolder:SetAttribute("ObsidianTransparentBackground", true)
                 table.insert(
                     Library.Corners,
                     New("UICorner", {
@@ -13766,6 +13785,7 @@ function Library:CreateWindow(WindowInfo)
                     Size = UDim2.fromScale(1, 0),
                     Parent = BoxHolder,
                 })
+                GroupboxHolder:SetAttribute("ObsidianTransparentBackground", true)
                 table.insert(
                     Library.Corners,
                     New("UICorner", {
