@@ -115,7 +115,15 @@ local function IsValidThemeData(Data: any): boolean
         end
     end
 
+    if Data.BackgroundImage ~= nil and typeof(Data.BackgroundImage) ~= "string" then
+        return false
+    end
+
     return true
+end
+
+local function NormalizePath(Path: string): string
+    return Path:gsub("\\", "/"):gsub("/+", "/"):gsub("/$", "")
 end
 
 local function EnsureThemesFolder(): string?
@@ -149,7 +157,9 @@ end
 
 local function BuildCurrentThemeData(): {[string]: any}
     local Library = ThemeManager.Library
-    local ThemeData = {}
+    local ThemeData = {
+        BackgroundImage = Library.Options.BackgroundImage.Value,
+    }
 
     for _, SchemeIndex in SchemeIndexes do
         ThemeData[SchemeIndex] = Library.Options[SchemeIndex].Value:ToHex()
@@ -224,10 +234,6 @@ function ThemeManager:SetFolder(Folder: string)
     EnsureThemesFolder()
 end
 
-local function NormalizePath(Path: string): string
-    return Path:gsub("\\\\", "/"):gsub("/+", "/"):gsub("/$", "")
-end
-
 local function GetFileName(FilePath: string): string?
     local Normalized = NormalizePath(FilePath)
     local FileName = Normalized:match("([^/]+)$")
@@ -248,7 +254,10 @@ local function GetThemeFilePath(ThemeName: string): string?
     if not Success or typeof(Files) ~= "table" then return nil end
     for _, FilePath in Files do
         if GetFileName(tostring(FilePath)) == ThemeName then
-            return tostring(FilePath)
+            local RawPath = tostring(FilePath)
+            local NormalizedPath = NormalizePath(RawPath)
+            if isfile(RawPath) then return RawPath end
+            if isfile(NormalizedPath) then return NormalizedPath end
         end
     end
     return nil
@@ -413,7 +422,11 @@ function ThemeManager:ApplyThemeData(ThemeData: any): (boolean, string?)
         local Element = Library.Options[Index]
         local FinalValue = Value
 
-        if table.find(SchemeIndexes, Index) then
+        if Index == "BackgroundImage" then
+            if typeof(Value) ~= "string" then continue end
+            Library:SetBackgroundImage(Value)
+            FinalValue = Value
+        elseif table.find(SchemeIndexes, Index) then
             local SuccessColor, Color = pcall(Color3.fromHex, Value)
             if not SuccessColor then continue end
 
@@ -509,6 +522,19 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         Text = "背景透明",
         Default = false,
     })
+
+    Themesbox:AddInput("BackgroundImage", {
+        Text = "背景图片",
+        Default = "",
+        Finished = true,
+        ClearTextOnFocus = false,
+        ClearTextOnBlur = false,
+    })
+
+    local BackgroundImageOption = Library.Options.BackgroundImage
+    BackgroundImageOption:OnChanged(function(Value)
+        Library:SetBackgroundImage(Value)
+    end)
 
     local CustomThemeNameInput = Themesbox:AddInput("ThemeManager_CustomThemeName", {
         Text = "自定义主题名称",
