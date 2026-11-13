@@ -144,7 +144,7 @@ local function GetThemePath(ThemeName: string): string?
         return nil
     end
 
-    return string.format("%s/%s.json", ThemesPath, ThemeName)
+    return NormalizePath(string.format("%s/%s.json", ThemesPath, ThemeName))
 end
 
 local function BuildCurrentThemeData(): {[string]: any}
@@ -224,21 +224,49 @@ function ThemeManager:SetFolder(Folder: string)
     EnsureThemesFolder()
 end
 
-function ThemeManager:ReloadCustomThemes(): {string}
-    local ThemesPath = EnsureThemesFolder()
-    if not ThemesPath then
-        return {}
-    end
+local function NormalizePath(Path: string): string
+    return Path:gsub("\\\\", "/"):gsub("/+", "/"):gsub("/$", "")
+end
+
+local function GetFileName(FilePath: string): string?
+    local Normalized = NormalizePath(FilePath)
+    local FileName = Normalized:match("([^/]+)$")
+    if not FileName then return nil end
+    local BaseName, Extension = FileName:match("^(.*)%.([^%.]+)$")
+    if not BaseName or string.lower(Extension) ~= "json" then return nil end
+    return BaseName
+end
+
+local function GetThemeFilePath(ThemeName: string): string?
+    local ThemesPath = GetThemesPath()
+    if not ThemesPath then return nil end
+
+    local ExpectedPath = NormalizePath(string.format("%s/%s.json", ThemesPath, ThemeName))
+    if isfile(ExpectedPath) then return ExpectedPath end
 
     local Success, Files = pcall(listfiles, ThemesPath)
-    if not Success or typeof(Files) ~= "table" then
-        return {}
+    if not Success or typeof(Files) ~= "table" then return nil end
+    for _, FilePath in Files do
+        if GetFileName(tostring(FilePath)) == ThemeName then
+            return tostring(FilePath)
+        end
     end
+    return nil
+end
+
+function ThemeManager:ReloadCustomThemes(): {string}
+    local ThemesPath = EnsureThemesFolder()
+    if not ThemesPath then return {} end
+
+    local Success, Files = pcall(listfiles, ThemesPath)
+    if not Success or typeof(Files) ~= "table" then return {} end
 
     local Names = {}
+    local Seen = {}
     for _, FilePath in Files do
-        local Name = tostring(FilePath):gsub("\\\\", "/"):match("([^/]+)%.json$")
-        if Name then
+        local Name = GetFileName(tostring(FilePath))
+        if Name and not Seen[Name] then
+            Seen[Name] = true
             table.insert(Names, Name)
         end
     end
@@ -247,15 +275,12 @@ function ThemeManager:ReloadCustomThemes(): {string}
 end
 
 function ThemeManager:GetCustomTheme(ThemeName: string): any
-    local Path = GetThemePath(ThemeName)
-    if not Path or not isfile(Path) then
-        return nil
-    end
+    if IsStringEmpty(ThemeName) or ThemeName:find("[/\\\\]") then return nil end
+    local Path = GetThemeFilePath(ThemeName)
+    if not Path or not isfile(Path) then return nil end
 
     local Success, Content = pcall(readfile, Path)
-    if not Success then
-        return nil
-    end
+    if not Success or typeof(Content) ~= "string" then return nil end
 
     local DecodedSuccess, Data = pcall(HttpService.JSONDecode, HttpService, Content)
     return DecodedSuccess and IsValidThemeData(Data) and Data or nil
@@ -308,7 +333,11 @@ function ThemeManager:GetDefaultTheme(): (string, boolean, string?)
     end
 
     local Success, Name = pcall(readfile, Path)
-    if not Success or typeof(Name) ~= "string" or not ThemeManager:GetCustomTheme(Name) then
+    if not Success or typeof(Name) ~= "string" then
+        return "none", false, "未找到默认主题"
+    end
+    local IsBuiltIn = ThemeManager.BuiltInThemes[Name] ~= nil
+    if not IsBuiltIn and not ThemeManager:GetCustomTheme(Name) then
         return "none", false, "未找到默认主题"
     end
     ThemeManager.DefaultThemeName = Name
@@ -334,8 +363,7 @@ end
 
 function ThemeManager:Delete(ThemeName: string): (boolean, string?)
     if IsStringEmpty(ThemeName) then return false, "未选择主题" end
-    local Path = GetThemesPath()
-    local ThemePath = Path and string.format("%s/%s.json", Path, ThemeName)
+    local ThemePath = GetThemeFilePath(ThemeName)
     if not ThemePath or not isfile(ThemePath) then return false, "主题文件不存在" end
     local Success, ErrorMessage = pcall(delfile, ThemePath)
     if not Success then return false, tostring(ErrorMessage) end
