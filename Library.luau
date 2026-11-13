@@ -12420,6 +12420,7 @@ function Library:CreateWindow(WindowInfo)
     local WindowOpacity = 1
     local TransparencyBases = setmetatable({}, { __mode = "k" })
     local TransparencyTweens = setmetatable({}, { __mode = "k" })
+    local TransparentBackgrounds = setmetatable({}, { __mode = "k" })
 
     local function ApplyWindowOpacity()
         if not MainFrame or not Tabs or not Container then
@@ -12429,7 +12430,7 @@ function Library:CreateWindow(WindowInfo)
         local OpacityScale = WindowOpacity
         local function ApplyToInstance(Instance)
             local Properties = {}
-            if Instance == MainFrame or Instance == Tabs or Instance == Container or Instance:GetAttribute("ObsidianTransparentBackground") == true then
+            if Instance == MainFrame or Instance == Tabs or Instance == Container or Instance == BottomBackground or Instance:GetAttribute("ObsidianTransparentBackground") == true then
                 Properties.BackgroundTransparency = true
             end
             for Property in Properties do
@@ -12477,14 +12478,25 @@ function Library:CreateWindow(WindowInfo)
         ApplyToInstance(MainFrame)
         ApplyToInstance(Tabs)
         ApplyToInstance(Container)
+        ApplyToInstance(BottomBackground)
         for _, Instance in MainFrame:GetDescendants() do
             if Instance:GetAttribute("ObsidianTransparentBackground") == true then
+                TransparentBackgrounds[Instance] = true
+            end
+        end
+        for Instance in TransparentBackgrounds do
+            if Instance.Parent then
                 ApplyToInstance(Instance)
+            else
+                TransparentBackgrounds[Instance] = nil
             end
         end
     end
 
     Library:GiveSignal(MainFrame.DescendantAdded:Connect(function(Instance)
+        if Instance:GetAttribute("ObsidianTransparentBackground") == true then
+            TransparentBackgrounds[Instance] = true
+        end
         task.defer(function()
             if Instance.Parent and MainFrame and WindowOpacity < 1 then
                 ApplyWindowOpacity()
