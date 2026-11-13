@@ -318,7 +318,7 @@ function ThemeManager:GetDefaultTheme(): (string, boolean, string?)
     end
 
     local Success, Name = pcall(readfile, Path)
-    if not Success or typeof(Name) ~= "string" or not (ThemeManager.BuiltInThemes[Name] or ThemeManager:GetCustomTheme(Name)) then
+    if not Success or typeof(Name) ~= "string" or not ThemeManager:GetCustomTheme(Name) then
         return "none", false, "未找到默认主题"
     end
     ThemeManager.DefaultThemeName = Name
@@ -477,14 +477,6 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     assert(ThemeManager.Library, "Library is not set, call ThemeManager:SetLibrary(Library) first.")
 
     local Library = ThemeManager.Library
-    local BuiltInThemeNames = {}
-    for Name in ThemeManager.BuiltInThemes do
-        table.insert(BuiltInThemeNames, Name)
-    end
-    table.sort(BuiltInThemeNames, function(A, B)
-        return ThemeManager.BuiltInThemes[A][1] < ThemeManager.BuiltInThemes[B][1]
-    end)
-
     local function CreateColorOption(Text, SchemeIndex)
         Themesbox:AddLabel(Text):AddColorPicker(SchemeIndex, {
             Default = Library.Scheme[SchemeIndex],
@@ -493,44 +485,25 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         return Library.Options[SchemeIndex]
     end
 
+    ThemeManager.ContrastLabel = Themesbox:AddLabel({ Text = "对比度检查：...", DoesWrap = true })
+
     local BackgroundColor = CreateColorOption("背景色", "BackgroundColor")
     local MainColor = CreateColorOption("主色", "MainColor")
     local AccentColor = CreateColorOption("强调色", "AccentColor")
     local OutlineColor = CreateColorOption("描边色", "OutlineColor")
     local FontColor = CreateColorOption("字体颜色", "FontColor")
 
-    ThemeManager.ContrastLabel = Themesbox:AddLabel({ Text = "对比度检查：...", DoesWrap = true })
-    Themesbox:AddDropdown("FontFace", {
-        Text = "字体",
-        Default = "Code",
-        Values = { "BuilderSans", "Code", "Fantasy", "Gotham", "Jura", "Roboto", "RobotoMono", "SourceSans" },
-        AllowNull = false,
-        Multi = false,
+    local TransparencyOption = Themesbox:AddToggle("ThemeManager_BackgroundTransparent", {
+        Text = "背景透明",
+        Default = false,
     })
+
     Themesbox:AddInput("BackgroundImage", {
         Text = "背景图片",
         Default = "",
         Finished = true,
         ClearTextOnFocus = false,
         ClearTextOnBlur = false,
-    })
-
-    local TransparencyOption = Themesbox:AddToggle("ThemeManager_BackgroundTransparent", {
-        Text = "背景透明",
-        Default = false,
-    })
-
-    local BuiltInThemeList = Themesbox:AddDropdown("ThemeManager_ThemeList", {
-        Text = "内置主题",
-        Values = BuiltInThemeNames,
-        AllowNull = true,
-        Multi = false,
-        FormatDisplayValue = function(Value)
-            return Value == ThemeManager.DefaultThemeName and Value ~= "Default" and (Value .. "（默认）") or Value
-        end,
-        FormatListValue = function(Value)
-            return Value == ThemeManager.DefaultThemeName and Value ~= "Default" and (Value .. "（默认）") or Value
-        end,
     })
 
     local CustomThemeNameInput = Themesbox:AddInput("ThemeManager_CustomThemeName", {
@@ -548,12 +521,11 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local function RefreshThemeLists()
         CustomThemeList:SetValues(ThemeManager:ReloadCustomThemes())
         CustomThemeList:SetValue(nil)
-        BuiltInThemeList:SetValues(BuiltInThemeNames)
     end
 
     local function RefreshDefaultThemeLabel()
-        local Name, Success = ThemeManager:GetDefaultTheme()
-        DefaultThemeLabel:SetText("当前默认主题：" .. (Success and Name or "无"))
+    local Name, Success = ThemeManager:GetDefaultTheme()
+    DefaultThemeLabel:SetText("当前默认主题：" .. (Success and Name or "无"))
     end
 
     local function SaveThemeWithContrastCheck(Name, SuccessText, AfterSave)
@@ -622,9 +594,9 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
             end)
     end)
     Themesbox:AddButton("设当前主题为默认", function()
-        local Name = CustomThemeList.Value or BuiltInThemeList.Value
+        local Name = CustomThemeList.Value
         if IsStringEmpty(Name) then
-            Library:Notify("请先从内置主题或自定义主题列表中选择")
+            Library:Notify("请先从自定义主题列表中选择")
             return
         end
         local Success, ErrorMessage = ThemeManager:SaveDefault(Name)
@@ -673,12 +645,6 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         if Library.Window then ApplyBackgroundTransparency(TransparencyOption.Value) end
     end)
 
-    BuiltInThemeList:OnChanged(function(Name)
-        if not IsStringEmpty(Name) then
-            local Success, ErrorMessage = ThemeManager:ApplyTheme(Name)
-            if not Success then Library:Notify("加载内置主题失败：" .. tostring(ErrorMessage)) end
-        end
-    end)
     CustomThemeList:OnChanged(function(Name)
         if not IsStringEmpty(Name) then
             local Success, ErrorMessage = ThemeManager:ApplyTheme(Name)
@@ -694,7 +660,6 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     AccentColor:OnChanged(UpdateTheme)
     OutlineColor:OnChanged(UpdateTheme)
     FontColor:OnChanged(UpdateTheme)
-    Library.Options.FontFace:OnChanged(function(Value) Library:SetFont(Enum.Font[Value]) end)
     Library.Options.BackgroundImage:OnChanged(function(Value) Library:SetBackgroundImage(Value) end)
 
     ThemeManager:LoadDefault()
