@@ -55,8 +55,10 @@ local ThemeManager = {
     ContrastLabel = nil,
     ContrastWasPoor = false,
     --// 内置主题：自带配色已清空，按下面格式自行添加即可
-    --// 格式：["主题名"] = { 排序序号, { FontColor, MainColor, AccentColor, BackgroundColor, OutlineColor } }，色值不带 #
-    --// 例：["我的主题"] = { 1, { FontColor = "ffffff", MainColor = "191919", AccentColor = "7d55ff", BackgroundColor = "0f0f0f", OutlineColor = "282828" } },
+    --// 格式：["主题名"] = { 排序序号, { FontColor, MainColor, AccentColor, BackgroundColor, OutlineColor, BackgroundImage?, BackgroundImageTransparency? } }，色值不带 #
+    --// BackgroundImage：可省略。填 Roblox 贴图 ID（纯数字）或 http/https 直链（会下载到本地）
+    --// BackgroundImageTransparency：可省略，0 = 最清晰 / 1 = 最淡，默认 0.75
+    --// 例（樱花）：["樱花"] = { 1, { FontColor = "ffffff", MainColor = "2b1d24", AccentColor = "ff8fb1", BackgroundColor = "1a1216", OutlineColor = "5c3a47", BackgroundImage = "https://raw.githubusercontent.com/你/仓库/main/sakura.png", BackgroundImageTransparency = 0.6 } },
     BuiltInThemes = {},
 }
 
@@ -143,6 +145,7 @@ local function BuildCurrentThemeData(): {[string]: any}
     local Library = ThemeManager.Library
     local ThemeData = {
         BackgroundImage = Library.Options.BackgroundImage.Value,
+        BackgroundImageTransparency = Library.BackgroundImageTransparency or 0.75,
     }
 
     for _, SchemeIndex in SchemeIndexes do
@@ -429,6 +432,19 @@ function ThemeManager:ApplyThemeData(ThemeData: any): (boolean, string?)
             if typeof(Value) ~= "string" then continue end
             Library:SetBackgroundImage(Value)
             FinalValue = Value
+        elseif Index == "BackgroundImageTransparency" then
+            if typeof(Value) ~= "number" then continue end
+
+            if Library.Window then
+                Library.Window:SetBackgroundImageTransparency(Value)
+            end
+
+            --// 回写到界面上的浓度滑块（浓度 = 1 - 透明度）
+            local ConcentrationSlider = Library.Options.BackgroundImageTransparency
+            if ConcentrationSlider then
+                ConcentrationSlider:SetValue(math.floor((1 - Value) * 100 + 0.5))
+            end
+            continue
         elseif table.find(SchemeIndexes, Index) then
             local SuccessColor, Color = pcall(Color3.fromHex, Value)
             if not SuccessColor then continue end
@@ -522,7 +538,7 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local FontColor = CreateColorOption("字体颜色", "FontColor")
 
     Themesbox:AddInput("BackgroundImage", {
-        Text = "背景图片",
+        Text = "背景图片（贴图 ID 或 http/https 直链，会下载到本地）",
         Default = "",
         Finished = true,
         ClearTextOnFocus = false,
@@ -533,6 +549,21 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     BackgroundImageOption:OnChanged(function(Value)
         Library:SetBackgroundImage(Value)
     end)
+
+    Themesbox:AddSlider("BackgroundImageTransparency", {
+        Text = "背景图浓度",
+        Min = 0,
+        Max = 100,
+        Default = math.floor((1 - (Library.BackgroundImageTransparency or 0.75)) * 100 + 0.5),
+        Rounding = 0,
+        Suffix = "%",
+        Callback = function(Value)
+            --// 滑块是浓度（越大越清晰），内部是透明度（越大越淡），所以反过来
+            if Library.Window then
+                Library.Window:SetBackgroundImageTransparency(1 - Value / 100)
+            end
+        end,
+    })
 
     Themesbox:AddDivider()
 
