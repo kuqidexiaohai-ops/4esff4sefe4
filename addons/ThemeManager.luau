@@ -73,6 +73,19 @@ local ThemeManager = {
                 BackgroundImageTransparency = 0.5,
             },
         },
+        --// 落日海岸：洛圣都夕阳暖调，背景图平均色 #89302d、中央偏亮 0.43，所以浓度调低压一层深底
+        ["落日海岸"] = {
+            2,
+            {
+                FontColor = "ffffff",
+                MainColor = "33191d",
+                AccentColor = "ff8a3d",
+                BackgroundColor = "1c1016",
+                OutlineColor = "4a2530",
+                BackgroundImage = "https://raw.githubusercontent.com/kuqidexiaohai-ops/4esff4sefe4/refs/heads/main/task-mwqcry7v2ix5o.png",
+                BackgroundImageTransparency = 0.66,
+            },
+        },
     },
 }
 
@@ -557,12 +570,35 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         Finished = true,
         ClearTextOnFocus = false,
         ClearTextOnBlur = false,
+
+        --// 脱敏显示：不聚焦时只露文件名，聚焦才显示完整链接，避免泄露仓库地址
+        MaskValue = function(Value)
+            if typeof(Value) ~= "string" or Value == "" then
+                return ""
+            end
+
+            --// 纯贴图 ID 没有泄露问题，原样显示
+            if tonumber(Value) or Value:match("^rbxassetid://%d+$") then
+                return Value
+            end
+
+            --// 链接只保留最后一段文件名
+            local FileName = Value:match("([^/]+)$")
+            if FileName and FileName ~= "" then
+                return "…/" .. FileName
+            end
+
+            return Value
+        end,
     })
 
     local BackgroundImageOption = Library.Options.BackgroundImage
     BackgroundImageOption:OnChanged(function(Value)
         Library:SetBackgroundImage(Value)
     end)
+
+    --// 浓度上限只到 80%：背景图叠在窗口上层，留 20% 透明底保证控件永远看得见
+    local MaxConcentration = 0.8
 
     Themesbox:AddSlider("BackgroundImageTransparency", {
         Text = "背景图浓度",
@@ -572,10 +608,13 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         Rounding = 0,
         Suffix = "%",
         Callback = function(Value)
-            --// 滑块是浓度（越大越清晰），内部是透明度（越大越淡），所以反过来
-            if Library.Window then
-                Library.Window:SetBackgroundImageTransparency(1 - Value / 100)
+            if not Library.Window then
+                return
             end
+
+            --// 滑块是浓度（越大越清晰），内部是透明度（越大越淡），所以反过来并封顶
+            local Concentration = math.min(Value / 100, MaxConcentration)
+            Library.Window:SetBackgroundImageTransparency(1 - Concentration)
         end,
     })
 
