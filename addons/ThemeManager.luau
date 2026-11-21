@@ -60,9 +60,20 @@ local ThemeManager = {
     --// BackgroundImageTransparency：可省略，0 = 最清晰 / 1 = 最淡，默认 0.75
     --// 例（樱花）：["樱花"] = { 1, { FontColor = "ffffff", MainColor = "2b1d24", AccentColor = "ff8fb1", BackgroundColor = "1a1216", OutlineColor = "5c3a47", BackgroundImage = "https://raw.githubusercontent.com/你/仓库/main/sakura.png", BackgroundImageTransparency = 0.6 } },
     BuiltInThemes = {
+        --// 经典色：库原始默认的纯黑配色，无背景图
+        ["经典色"] = {
+            1,
+            {
+                FontColor = "ffffff",
+                MainColor = "191919",
+                AccentColor = "7d55ff",
+                BackgroundColor = "0f0f0f",
+                OutlineColor = "282828",
+            },
+        },
         --// 樱花夜：暗紫粉调，背景图实测平均色 #281820、亮度 0.125，中央空旷适合放控件
         ["樱花夜"] = {
-            1,
+            2,
             {
                 FontColor = "ffffff",
                 MainColor = "2b1d24",
@@ -75,7 +86,7 @@ local ThemeManager = {
         },
         --// 落日海岸：洛圣都夕阳暖调，背景图平均色 #89302d、中央偏亮 0.43，所以浓度调低压一层深底
         ["落日海岸"] = {
-            2,
+            3,
             {
                 FontColor = "ffffff",
                 MainColor = "33191d",
@@ -565,31 +576,11 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local FontColor = CreateColorOption("字体颜色", "FontColor")
 
     Themesbox:AddInput("BackgroundImage", {
-        Text = "背景图片（贴图 ID 或 http/https 直链，会下载到本地）",
+        Text = "背景图片（贴图 ID 或 http/https 直链）",
         Default = "",
         Finished = true,
         ClearTextOnFocus = false,
         ClearTextOnBlur = false,
-
-        --// 脱敏显示：不聚焦时只露文件名，聚焦才显示完整链接，避免泄露仓库地址
-        MaskValue = function(Value)
-            if typeof(Value) ~= "string" or Value == "" then
-                return ""
-            end
-
-            --// 纯贴图 ID 没有泄露问题，原样显示
-            if tonumber(Value) or Value:match("^rbxassetid://%d+$") then
-                return Value
-            end
-
-            --// 链接只保留最后一段文件名
-            local FileName = Value:match("([^/]+)$")
-            if FileName and FileName ~= "" then
-                return "…/" .. FileName
-            end
-
-            return Value
-        end,
     })
 
     local BackgroundImageOption = Library.Options.BackgroundImage
