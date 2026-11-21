@@ -257,6 +257,7 @@ local Library = {
     CornerRadius = 4,
 
     IsLightTheme = false,
+    BackgroundImageTransparency = 0.75,
     Scheme = {
         BackgroundColor = Color3.fromRGB(15, 15, 15),
         MainColor = Color3.fromRGB(25, 25, 25),
@@ -11868,6 +11869,8 @@ function Library:CreateWindow(WindowInfo)
     local Container
     local BackgroundImage
     local HasBackgroundImage = false
+    --// 背景图浓度：0 = 完全清晰，1 = 完全透明不可见（默认 0.75，即淡淡一层）
+    local BackgroundImageTransparency = 0.75
     local BottomBackground
     local BottomBackgroundCorner
     local FooterLabel
@@ -12188,7 +12191,7 @@ function Library:CreateWindow(WindowInfo)
             ScaleType = Enum.ScaleType.Stretch,
             ZIndex = Overlay.ZIndex + 1,
             BackgroundTransparency = 1,
-            ImageTransparency = 0.75,
+            ImageTransparency = BackgroundImageTransparency,
             Visible = false,
             Parent = ScreenGui,
         })
@@ -12772,8 +12775,22 @@ function Library:CreateWindow(WindowInfo)
         WindowInfo.BackgroundImage = Image
     end
 
-    function Window:SetFooter(Footer: string)
-        assert(typeof(Footer) == "string", "Footer 应为字符串，实际为：" .. typeof(Footer))
+    function Window:SetBackgroundImageTransparency(Transparency: number)
+        assert(typeof(Transparency) == "number", "Transparency 应为数字")
+
+        BackgroundImageTransparency = math.clamp(Transparency, 0, 1)
+        Library.BackgroundImageTransparency = BackgroundImageTransparency
+
+        if BackgroundImage then
+            BackgroundImage.ImageTransparency = BackgroundImageTransparency
+        end
+    end
+
+    function Window:GetBackgroundImageTransparency(): number
+        return BackgroundImageTransparency
+    end
+
+    function Window:SetFooter(Footer: string)        assert(typeof(Footer) == "string", "Footer 应为字符串，实际为：" .. typeof(Footer))
 
         FooterLabel.Text = Footer
         WindowInfo.Footer = Footer
