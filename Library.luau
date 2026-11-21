@@ -396,6 +396,11 @@ local Templates = {
 
         BackgroundImage = "",
 
+        --// 收缩后头像上显示的图案。留空则自动用标题首字母。
+        --// 支持 lucide 图标名（如 "zap"）、Roblox 贴图 ID 或图片直链。
+        --// lucide 图标名去哪里找：https://lucide.dev/icons/
+        CompactIcon = nil,
+
         Animations = {
             ToggleWindow = false,
             TabSwitch = false,
@@ -1662,7 +1667,8 @@ function Library:GetIcon(IconName: string): Icon?
 end
 
 function Library:GetCustomIcon(IconName: string): any
-    if not IconName then
+    --// 空串直接判无效：清空背景图时不用再白跑一趟 lucide 查表
+    if not IconName or IconName == "" then
         return nil
     end
 
@@ -11859,6 +11865,7 @@ function Library:CreateWindow(WindowInfo)
     local WindowTitle
     local WindowIcon
     local CompactAvatar
+    local CompactIconLabel
     local RightWrapper
     local SearchBox
     local Window = {}
@@ -12259,10 +12266,32 @@ function Library:CreateWindow(WindowInfo)
             })
         end
 
+        --// 标题排版：把分隔符两侧的空格收掉、分隔符缩成细竖线，整体显得紧凑
+        --// 只处理分隔符，名字本身不动，收缩头像取首字母也不受影响
+        local function FormatTitle(Raw: string): string
+            if typeof(Raw) ~= "string" then
+                return Raw
+            end
+
+            local Escaped = Raw:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+
+            --// 先换半角竖线（Sep 自身含半角竖线，换完再换全角就不会被二次匹配），再换全角竖线
+            local Sep = '<font size="13" color="#909090">|</font>'
+            Escaped = Escaped:gsub("%s*|%s*", Sep)
+            Escaped = Escaped:gsub("%s*｜%s*", Sep)
+            Escaped = Escaped:gsub("%s*[·•]%s*", " ")
+
+            --// 连续空格压成一个，避免名字里留大空隙
+            Escaped = Escaped:gsub("  +", " "):gsub("^%s+", ""):gsub("%s+$", "")
+
+            return Escaped
+        end
+
         WindowTitle = New("TextLabel", {
             BackgroundTransparency = 1,
+            RichText = true,
             Size = UDim2.fromOffset(0, 0),
-            Text = WindowInfo.Title,
+            Text = FormatTitle(WindowInfo.Title),
             TextSize = 20,
             TextTruncate = Enum.TextTruncate.AtEnd,
             TextXAlignment = Enum.TextXAlignment.Left,
@@ -12270,38 +12299,106 @@ function Library:CreateWindow(WindowInfo)
             Parent = TitleHolder,
         })
 
-        --// 标题黑白流光：白色文字 + 移动的黑白渐变条带
+        --// 标题黑白流光：白色文字 + 循环滚动的暗色条带
+        --// 做法是每帧按「圆周位置」重排关键点，而不是平移 Offset。
+        --// 平移 Offset 时条带会从一端滑出、再从另一端硬跳回来（就是能看出断掉重来的原因）；
+        --// 圆周重排则是条带从 1 绕回 0，位置连续，接缝天然看不出来。
+        --// 条带数取整数，让一个循环正好铺满 0~1，
+        --// 这样绕回起点时颜色能严丝合缝接上，不会出现断裂
+        local TitleBandCount = 4
+        local TitleBandSpacing = 1 / TitleBandCount
+        local TitleBandDark = Color3.fromRGB(145, 145, 145)
+        local TitleBandLight = Color3.fromRGB(255, 255, 255)
+
         local TitleGradient = New("UIGradient", {
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 255, 255)),
-                ColorSequenceKeypoint.new(0.35, Color3.fromRGB(140, 140, 140)),
-                ColorSequenceKeypoint.new(0.50, Color3.fromRGB(255, 255, 255)),
-                ColorSequenceKeypoint.new(0.65, Color3.fromRGB(110, 110, 110)),
-                ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 255, 255)),
-            }),
             Rotation = 18,
             Parent = WindowTitle,
         })
 
-        --// 流动动画：不断平移渐变的 Offset
+        --// 位置 0 和 1 是同一个点，取那里的插值颜色做首尾关键点，
+        --// 这样条带绕回起点时颜色是接上的，接缝就在视觉上消失了
+        local function SampleBandColor(Bands: { any }, Time: number): Color3
+            local Count = #Bands
+
+            for Index = 1, Count do
+                local From = Bands[Index][1]
+                local NextIndex = Index % Count + 1
+                local To = Bands[NextIndex][1] + (if Index == Count then 1 else 0)
+
+                local Sample = if Index == Count and Time < From then Time + 1 else Time
+                if Sample >= From and Sample <= To then
+                    local Alpha = if To > From then (Sample - From) / (To - From) else 0
+                    return Bands[Index][2]:Lerp(Bands[NextIndex][2], Alpha)
+                end
+            end
+
+            return Bands[1][2]
+        end
+
+        local function RefreshTitleGradient(Phase: number)
+            local Bands = {}
+
+            for Index = 0, TitleBandCount - 1 do
+                local Position = (Index * TitleBandSpacing + Phase) % 1
+                local Color = if Index % 2 == 1 then TitleBandLight else TitleBandDark
+                table.insert(Bands, { Position, Color })
+            end
+
+            table.sort(Bands, function(A, B)
+                return A[1] < B[1]
+            end)
+
+            local Keypoints = {
+                ColorSequenceKeypoint.new(0, SampleBandColor(Bands, 0)),
+            }
+            for _, Band in Bands do
+                --// 太贴近端点的让给固定的首尾关键点，避免出现重复时间
+                if Band[1] > 0.001 and Band[1] < 0.999 then
+                    table.insert(Keypoints, ColorSequenceKeypoint.new(Band[1], Band[2]))
+                end
+            end
+            table.insert(Keypoints, ColorSequenceKeypoint.new(1, SampleBandColor(Bands, 1)))
+
+            TitleGradient.Color = ColorSequence.new(Keypoints)
+        end
+
+        RefreshTitleGradient(0)
+
         do
             local Phase = 0
             Library:GiveSignal(RunService.RenderStepped:Connect(function()
-                if not (WindowTitle and WindowTitle.Visible) then
+                if not (WindowTitle and WindowTitle.Visible and MainFrame and MainFrame.Visible) then
                     return
                 end
 
-                Phase = (Phase + 0.0012) % 1
-                --// 在 -0.6 ~ 0.6 之间往返平移，让亮带扫过文字又不会整条滑出
-                TitleGradient.Offset = Vector2.new(-0.6 + Phase * 1.2, 0)
+                Phase = (Phase + 0.0016) % 1
+                RefreshTitleGradient(Phase)
             end))
         end
 
-        --// 收缩状态专用头像：始终是首字母文本，不依赖网络图标或图片资源
+        --// 取首个「完整字符」做头像文字：sub(1,1) 是按字节切的，中文标题会被切成半个字
+        --// 优先用 utf8 库，取不到时退回按字节切（纯 ASCII 标题不受影响）
+        local function GetTitleInitial(Title: string): string
+            if typeof(Title) ~= "string" or Title == "" then
+                return "?"
+            end
+
+            if utf8 and utf8.charpattern then
+                local First = Title:match("^" .. utf8.charpattern)
+                if First and First ~= "" then
+                    return First
+                end
+            end
+
+            return Title:sub(1, 1)
+        end
+
+        --// 收缩状态专用头像：底子是首字母文本，配了 CompactIcon 时改用图案盖在上面
+        --// 两者都是 UI 自带画出来的，不依赖网络图标能不能拉到，所以绝不会出问号方块
         CompactAvatar = New("TextLabel", {
             BackgroundColor3 = "MainColor",
             Size = UDim2.fromOffset(30, 30),
-            Text = WindowInfo.Title:sub(1, 1),
+            Text = GetTitleInitial(WindowInfo.Title),
             TextSize = 16,
             Visible = false,
             Parent = TitleHolder,
@@ -12314,6 +12411,30 @@ function Library:CreateWindow(WindowInfo)
             })
         )
         Library:AddOutline(CompactAvatar)
+
+        --// 图案层：只在 CompactIcon 能解析成有效图标时才创建并显示
+        --// 注意 lucide 图标是字体图标（走 FontFace），不是图片，
+        --// 所以必须用 CreateIcon 让它自己选 TextLabel 还是 ImageLabel，不能写死 ImageLabel
+        local CompactIconData = if WindowInfo.CompactIcon then Library:GetCustomIcon(WindowInfo.CompactIcon) else nil
+        if CompactIconData then
+            CompactIconLabel = Library:CreateIcon(CompactIconData, {
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.fromScale(0.5, 0.5),
+                Size = UDim2.fromOffset(16, 16),
+                ImageColor3 = "FontColor",
+                Visible = false,
+                Parent = CompactAvatar,
+            })
+
+            --// 换成主题时跟着变色：图片图标用 ImageColor3，字体图标用 TextColor3
+            if CompactIconLabel:IsA("TextLabel") or CompactIconLabel:IsA("TextButton") then
+                CompactIconLabel.TextColor3 = Library.Scheme.FontColor
+                Library:AddToRegistry(CompactIconLabel, { TextColor3 = "FontColor" })
+            else
+                CompactIconLabel.ImageColor3 = Library.Scheme.FontColor
+                Library:AddToRegistry(CompactIconLabel, { ImageColor3 = "FontColor" })
+            end
+        end
 
         RefreshWindowTitleSize = function()
             local IconWidth = 0
@@ -12751,7 +12872,7 @@ function Library:CreateWindow(WindowInfo)
     function Window:ChangeTitle(title)
         assert(typeof(title) == "string", "title 应为字符串，实际为：" .. typeof(title))
 
-        WindowTitle.Text = title
+        WindowTitle.Text = FormatTitle(title)
         WindowInfo.Title = title
         RefreshWindowTitleSize()
     end
@@ -12984,10 +13105,14 @@ function Library:CreateWindow(WindowInfo)
 
         WindowTitle.Visible = not IsCompact
 
-        --// 收缩：标题字隐掉，图标也隐掉，只留一个首字母头像（不依赖图片，绝不会出问号方块）
+        --// 收缩：标题字隐掉，图标也隐掉，只留头像；配了图案就用图案，没配就用首字母
         if CompactAvatar then
             CompactAvatar.Visible = IsCompact
-            CompactAvatar.Text = WindowInfo.Title:sub(1, 1)
+            CompactAvatar.Text = if CompactIconLabel then "" else GetTitleInitial(WindowInfo.Title)
+        end
+
+        if CompactIconLabel then
+            CompactIconLabel.Visible = IsCompact
         end
 
         if WindowIcon then
