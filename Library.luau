@@ -12758,7 +12758,8 @@ function Library:CreateWindow(WindowInfo)
                         if CustomImageManagerAssets[FileName] == nil then
                             CustomImageManager.AddAsset(FileName, 0, Image)
                         else
-                            CustomImageManager.DownloadAsset(FileName, true)
+                            --// 已下载过就直接复用本地文件，避免每次切主题都重新下载整张图
+                            CustomImageManager.DownloadAsset(FileName, false)
                         end
 
                         FillInstance(ImageContent({ Url = CustomImageManager.GetAsset(FileName) }), BackgroundImage)
