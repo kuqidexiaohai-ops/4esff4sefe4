@@ -54,26 +54,10 @@ local ThemeManager = {
     DefaultThemeName = nil,
     ContrastLabel = nil,
     ContrastWasPoor = false,
-    BuiltInThemes = {
-        ["Default"] = { 1, { FontColor = "ffffff", MainColor = "191919", AccentColor = "7d55ff", BackgroundColor = "0f0f0f", OutlineColor = "282828" } },
-        ["BBot"] = { 2, { FontColor = "ffffff", MainColor = "1e1e1e", AccentColor = "7e48a3", BackgroundColor = "232323", OutlineColor = "141414" } },
-        ["Fatality"] = { 3, { FontColor = "ffffff", MainColor = "1e1842", AccentColor = "c50754", BackgroundColor = "191335", OutlineColor = "3c355d" } },
-        ["Jester"] = { 4, { FontColor = "ffffff", MainColor = "242424", AccentColor = "db4467", BackgroundColor = "1c1c1c", OutlineColor = "373737" } },
-        ["Mint"] = { 5, { FontColor = "ffffff", MainColor = "242424", AccentColor = "3db488", BackgroundColor = "1c1c1c", OutlineColor = "373737" } },
-        ["Tokyo Night"] = { 6, { FontColor = "ffffff", MainColor = "191925", AccentColor = "6759b3", BackgroundColor = "16161f", OutlineColor = "323232" } },
-        ["Ubuntu"] = { 7, { FontColor = "ffffff", MainColor = "3e3e3e", AccentColor = "e2581e", BackgroundColor = "323232", OutlineColor = "191919" } },
-        ["Quartz"] = { 8, { FontColor = "ffffff", MainColor = "232330", AccentColor = "426e87", BackgroundColor = "1d1b26", OutlineColor = "27232f" } },
-        ["Nord"] = { 9, { FontColor = "eceff4", MainColor = "3b4252", AccentColor = "88c0d0", BackgroundColor = "2e3440", OutlineColor = "4c566a" } },
-        ["Dracula"] = { 10, { FontColor = "f8f8f2", MainColor = "44475a", AccentColor = "ff79c6", BackgroundColor = "282a36", OutlineColor = "6272a4" } },
-        ["Monokai"] = { 11, { FontColor = "f8f8f2", MainColor = "272822", AccentColor = "f92672", BackgroundColor = "1e1f1c", OutlineColor = "49483e" } },
-        ["Gruvbox"] = { 12, { FontColor = "ebdbb2", MainColor = "3c3836", AccentColor = "fb4934", BackgroundColor = "282828", OutlineColor = "504945" } },
-        ["Solarized"] = { 13, { FontColor = "839496", MainColor = "073642", AccentColor = "cb4b16", BackgroundColor = "002b36", OutlineColor = "586e75" } },
-        ["Catppuccin"] = { 14, { FontColor = "d9e0ee", MainColor = "302d41", AccentColor = "f5c2e7", BackgroundColor = "1e1e2e", OutlineColor = "575268" } },
-        ["One Dark"] = { 15, { FontColor = "abb2bf", MainColor = "282c34", AccentColor = "c678dd", BackgroundColor = "21252b", OutlineColor = "5c6370" } },
-        ["Cyberpunk"] = { 16, { FontColor = "f9f9f9", MainColor = "262335", AccentColor = "00ff9f", BackgroundColor = "1a1a2e", OutlineColor = "413c5e" } },
-        ["Oceanic Next"] = { 17, { FontColor = "d8dee9", MainColor = "1b2b34", AccentColor = "6699cc", BackgroundColor = "16232a", OutlineColor = "343d46" } },
-        ["Material"] = { 18, { FontColor = "eeffff", MainColor = "212121", AccentColor = "82aaff", BackgroundColor = "151515", OutlineColor = "424242" } },
-    }
+    --// 内置主题：自带配色已清空，按下面格式自行添加即可
+    --// 格式：["主题名"] = { 排序序号, { FontColor, MainColor, AccentColor, BackgroundColor, OutlineColor } }，色值不带 #
+    --// 例：["我的主题"] = { 1, { FontColor = "ffffff", MainColor = "191919", AccentColor = "7d55ff", BackgroundColor = "0f0f0f", OutlineColor = "282828" } },
+    BuiltInThemes = {},
 }
 
 function ThemeManager:SetLibrary(Library)
@@ -183,10 +167,19 @@ end
 
 function ThemeManager:GetContrastReport(): { Ratio: number, PairName: string, Passes: boolean }
     local Library = ThemeManager.Library
-    local FontColor = Library.Options.FontColor.Value
+    local FontColorElement = Library.Options.FontColor
+    local BackgroundElement = Library.Options.BackgroundColor
+    local MainColorElement = Library.Options.MainColor
+
+    --// 颜色控件尚未创建时直接返回"通过"，避免索引 nil 报错
+    if not (FontColorElement and BackgroundElement and MainColorElement) then
+        return { Ratio = math.huge, PairName = "", Passes = true }
+    end
+
+    local FontColor = FontColorElement.Value
     local Surfaces = {
-        { Name = "背景色", Color = Library.Options.BackgroundColor.Value },
-        { Name = "主色", Color = Library.Options.MainColor.Value },
+        { Name = "背景色", Color = BackgroundElement.Value },
+        { Name = "主色", Color = MainColorElement.Value },
     }
     local WorstRatio, WorstName = math.huge, ""
     for _, Surface in Surfaces do
@@ -203,6 +196,12 @@ function ThemeManager:UpdateContrastWarning()
     local Library = ThemeManager.Library
     local Report = ThemeManager:GetContrastReport()
     local TextLabel = Label.TextLabel
+
+    --// 原版有这段保护：注册表里没有该 TextLabel 时先注册，否则下面直接索引会报错
+    if not Library.Registry[TextLabel] then
+        Library:AddToRegistry(TextLabel, {})
+    end
+
     if Report.Passes then
         Label:SetText(string.format("对比度检查：良好（%.1f:1）", Report.Ratio))
         TextLabel.TextColor3 = Library.Scheme.FontColor
@@ -274,9 +273,13 @@ function ThemeManager:ReloadCustomThemes(): {string}
     local Seen = {}
     for _, FilePath in Files do
         local Name = GetFileName(tostring(FilePath))
-        if Name and not Seen[Name] then
-            Seen[Name] = true
-            table.insert(Names, Name)
+        if Name then
+            --// Windows 文件系统不区分大小写，用小写做去重键，避免同一主题重复出现
+            local Key = string.lower(Name)
+            if not Seen[Key] then
+                Seen[Key] = true
+                table.insert(Names, Name)
+            end
         end
     end
     table.sort(Names)
@@ -536,6 +539,65 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         Library:SetBackgroundImage(Value)
     end)
 
+    Themesbox:AddDivider()
+
+    --// 前向声明：内置主题的「设为默认」按钮要用到它，稍后才赋值
+    local RefreshDefaultThemeLabel
+
+    --// 内置主题列表（BuiltInThemes 现在为空，等你按上面的格式自己加）
+    local BuiltInThemesNames = {}
+    for Name in ThemeManager.BuiltInThemes do
+        table.insert(BuiltInThemesNames, Name)
+    end
+    table.sort(BuiltInThemesNames, function(IndexA, IndexB)
+        local ThemeA = ThemeManager.BuiltInThemes[IndexA]
+        local ThemeB = ThemeManager.BuiltInThemes[IndexB]
+        local OrderA = (ThemeA and ThemeA[1]) or math.huge
+        local OrderB = (ThemeB and ThemeB[1]) or math.huge
+        return OrderA < OrderB
+    end)
+
+    local ThemeList = Themesbox:AddDropdown("ThemeManager_ThemeList", {
+        Text = (#BuiltInThemesNames > 0) and "内置主题列表" or "内置主题列表（暂无，可在 BuiltInThemes 里添加）",
+        Values = BuiltInThemesNames,
+        AllowNull = true,
+        Multi = false,
+
+        FormatDisplayValue = function(Value)
+            if Value ~= "Default" and Value == ThemeManager.DefaultThemeName then
+                return string.format("%s（默认）", Value)
+            end
+
+            return Value
+        end,
+        FormatListValue = function(Value)
+            if Value ~= "Default" and Value == ThemeManager.DefaultThemeName then
+                return string.format("%s（默认）", Value)
+            end
+
+            return Value
+        end,
+    })
+
+    Themesbox:AddButton("将内置主题设为默认", function()
+        local Name = ThemeList.Value
+        if IsStringEmpty(Name) then
+            Library:Notify("请先选择一个内置主题")
+            return
+        end
+
+        local Success, ErrorMessage = ThemeManager:SaveDefault(Name)
+        if not Success then
+            Library:Notify("设置默认主题失败：" .. tostring(ErrorMessage))
+            return
+        end
+
+        Library:Notify(string.format("已设为默认主题：%s", Name))
+        if RefreshDefaultThemeLabel then RefreshDefaultThemeLabel() end
+    end)
+
+    Themesbox:AddDivider()
+
     local CustomThemeNameInput = Themesbox:AddInput("ThemeManager_CustomThemeName", {
         Text = "自定义主题名称",
         Placeholder = "输入名称后创建主题",
@@ -545,17 +607,51 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         Values = ThemeManager:ReloadCustomThemes(),
         AllowNull = true,
         Multi = false,
+
+        --// 恢复原版：默认主题在列表里带 "(默认)" 标记
+        FormatDisplayValue = function(Value)
+            if Value == ThemeManager.DefaultThemeName then
+                return string.format("%s（默认）", Value)
+            end
+
+            return Value
+        end,
+        FormatListValue = function(Value)
+            if Value == ThemeManager.DefaultThemeName then
+                return string.format("%s（默认）", Value)
+            end
+
+            return Value
+        end,
     })
     local DefaultThemeLabel = Themesbox:AddLabel("当前默认主题：无")
 
     local function RefreshThemeLists()
-        CustomThemeList:SetValues(ThemeManager:ReloadCustomThemes())
-        CustomThemeList:SetValue(nil)
+        local PreviousValue = CustomThemeList.Value
+        local Names = ThemeManager:ReloadCustomThemes()
+
+        CustomThemeList:SetValues(Names)
+
+        --// 刷新后保留原来的选中项；若它已被删除/改名，则清空选中
+        local StillExists = false
+        if PreviousValue ~= nil then
+            for _, Name in Names do
+                if Name == PreviousValue then
+                    StillExists = true
+                    break
+                end
+            end
+        end
+        CustomThemeList:SetValue(StillExists and PreviousValue or nil)
     end
 
-    local function RefreshDefaultThemeLabel()
-    local Name, Success = ThemeManager:GetDefaultTheme()
-    DefaultThemeLabel:SetText("当前默认主题：" .. (Success and Name or "无"))
+    function RefreshDefaultThemeLabel()
+        local Name, Success = ThemeManager:GetDefaultTheme()
+        DefaultThemeLabel:SetText("当前默认主题：" .. (Success and Name or "无"))
+        --// 对齐原版：默认主题变化后顺手刷新一下列表（删除主题后列表不会残留）
+        if CustomThemeList then
+            RefreshThemeLists()
+        end
     end
 
     local function SaveThemeWithContrastCheck(Name, SuccessText, AfterSave)
@@ -590,6 +686,8 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     end)
     Themesbox:AddButton("刷新主题列表", RefreshThemeLists)
 
+    Themesbox:AddDivider()
+
     local function GetSelectedCustomTheme()
         local Name = CustomThemeList.Value
         if IsStringEmpty(Name) then
@@ -603,7 +701,11 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         local Name = GetSelectedCustomTheme()
         if not Name then return end
         local Success, ErrorMessage = ThemeManager:ApplyTheme(Name)
-        if not Success then Library:Notify("加载主题失败：" .. tostring(ErrorMessage)) end
+        if not Success then
+            Library:Notify("加载主题失败：" .. tostring(ErrorMessage))
+            return
+        end
+        Library:Notify(string.format("已加载主题 %q", Name))
     end)
     Themesbox:AddButton("覆盖自定义主题", function()
         local Name = GetSelectedCustomTheme()
@@ -644,6 +746,8 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
             end)
     end)
 
+    Themesbox:AddDivider()
+
     local ThemeJSONInput = Themesbox:AddInput("ThemeManager_ThemeJSON", { Text = "主题 JSON" })
     Themesbox:AddButton("导入主题", function()
         local Content = ThemeJSONInput.Value
@@ -675,12 +779,16 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
         if Library.Window then ApplyBackgroundTransparency(TransparencyOption.Value) end
     end)
 
-    CustomThemeList:OnChanged(function(Name)
+    --// 内置主题列表：选中即应用（与原版一致）
+    ThemeList:OnChanged(function()
+        local Name = ThemeList.Value
         if not IsStringEmpty(Name) then
-            local Success, ErrorMessage = ThemeManager:ApplyTheme(Name)
-            if not Success then Library:Notify("加载主题失败：" .. tostring(ErrorMessage)) end
+            ThemeManager:ApplyTheme(Name)
         end
     end)
+
+    --// 原版行为：切换自定义主题列表「不」自动应用，必须点下面的「加载自定义主题」按钮
+    --// （之前这里绑定了 OnChanged 直接 ApplyTheme，导致一选中就换肤，已移除）
 
     local function UpdateTheme()
         ThemeManager:ThemeUpdate()
@@ -694,6 +802,17 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     ThemeManager:UpdateContrastWarning()
     ThemeManager.AppliedToTab = true
     RefreshDefaultThemeLabel()
+
+    --// 若默认主题存在，刷新后把它同步显示在对应列表里（原版会同步内置列表）
+    local DefaultName, HasDefault = ThemeManager:GetDefaultTheme()
+    if HasDefault then
+        if ThemeManager.BuiltInThemes[DefaultName] then
+            ThemeList:SetValue(DefaultName)
+        elseif ThemeManager:GetCustomTheme(DefaultName) then
+            CustomThemeList:SetValue(DefaultName)
+        end
+    end
+
     return Themesbox
 end
 
