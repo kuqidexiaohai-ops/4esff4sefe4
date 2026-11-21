@@ -1466,6 +1466,135 @@ function Library:UpdateColorsUsingRegistry()
     end
 end
 
+--// 分区透明度 \\--
+--// PartTransparency[组名] = 0~1（0 完全不透明）
+--// 每个实例登记到某个组后，最终背景透明度按 1-(1-Base)*窗口透明度*(1-分区Alpha) 相乘叠加
+Library.PartTransparency = {}
+local PartTargets = setmetatable({}, { __mode = "k" })
+local PartBases = setmetatable({}, { __mode = "k" })
+local PartOwners = setmetatable({}, { __mode = "k" })
+
+function Library:RegisterTransparencyTarget(Group: string, Instance: any, Owner: any?)
+    PartTargets[Instance] = Group
+    if Owner ~= nil then
+        PartOwners[Instance] = Owner
+    end
+    if PartBases[Instance] == nil then
+        local Success, Current = pcall(function()
+            return Instance.BackgroundTransparency
+        end)
+        PartBases[Instance] = Success and typeof(Current) == "number" and Current or 0
+    end
+end
+
+function Library:GetPartTransparency(Group: string): number
+    return Library.PartTransparency[Group] or 0
+end
+
+--// 判断群组框所在的标签页当前是否可见（性能考虑：只重算可见页）
+local function IsOwnerVisible(Owner)
+    if Owner == nil then
+        return true
+    end
+
+    local Tab = Owner.Tab
+    if Tab == nil then
+        return true
+    end
+
+    if Tab.Holder and Tab.Holder.Visible == false then
+        return false
+    end
+
+    if Owner.Holder and Owner.Holder.Visible == false then
+        return false
+    end
+
+    return true
+end
+
+--// 只写非窗口内元素（窗口内元素由 ApplyWindowOpacity 统一处理，避免两个写入方打架）
+function Library:ApplyPartTransparency(Group: string)
+    if Library.Unloaded then
+        return
+    end
+
+    local Alpha = math.clamp(Library.PartTransparency[Group] or 0, 0, 1)
+
+    for Instance, InstanceGroup in PartTargets do
+        if not Instance.Parent then
+            PartTargets[Instance] = nil
+            PartBases[Instance] = nil
+            PartOwners[Instance] = nil
+            continue
+        end
+
+        if InstanceGroup ~= Group then
+            continue
+        end
+
+        --// 群组框：只处理可见标签页里的，避免一次 tween 几百个实例
+        if not IsOwnerVisible(PartOwners[Instance]) then
+            continue
+        end
+
+        --// 带该属性的实例已由 ApplyWindowOpacity 统一处理，这里跳过避免两个写入方互相覆盖
+        --// 例外：群组框需要独立叠加自身分区透明度，由 ApplyWindowOpacity 里的 PartAlpha 处理，
+        --//       所以这里的跳过对它依然成立，无需重复写入
+        if Instance:GetAttribute("ObsidianTransparentBackground") == true then
+            continue
+        end
+
+        local Base = PartBases[Instance] or 0
+        local Target = 1 - (1 - Base) * (1 - Alpha)
+
+        local SuccessTween, Tween = pcall(function()
+            return TweenService:Create(Instance, Library.TweenInfo, { BackgroundTransparency = Target })
+        end)
+        if SuccessTween then
+            Tween:Play()
+        else
+            Instance.BackgroundTransparency = Target
+        end
+    end
+end
+
+function Library:SetPartTransparency(Group: string, Alpha: number)
+    assert(typeof(Alpha) == "number", "Alpha 应为数字")
+    Library.PartTransparency[Group] = math.clamp(Alpha, 0, 1)
+
+    --// 非窗口内元素直接写；群组框这类窗口内元素交给 ApplyWindowOpacity（它会读同一个 PartTransparency）
+    Library:ApplyPartTransparency(Group)
+
+    if Library.Window and Library.Window.ApplyTransparency then
+        Library.Window:ApplyTransparency()
+    end
+end
+
+function Library:ResetAllTransparency()
+    for Group in pairs(Library.PartTransparency) do
+        Library.PartTransparency[Group] = 0
+    end
+    Library.PartTransparency = {}
+
+    if Library.Window then
+        Library.Window:SetTransparency(1)
+    end
+
+    if Library.KeybindMenu and Library.KeybindMenu.SetBackgroundTransparencyAlpha then
+        Library.KeybindMenu:SetBackgroundTransparencyAlpha(0)
+    end
+
+    for Instance, _Group in PartTargets do
+        if Instance.Parent then
+            local Base = PartBases[Instance] or 0
+            pcall(function()
+                Instance.BackgroundTransparency = Base
+            end)
+        end
+    end
+end
+
 function Library:SetDPIScale(DPIScale: number)
     Library.DPIScale = DPIScale / 100
     Library.MinSize = Library.OriginalMinSize * Library.DPIScale
@@ -3286,6 +3415,16 @@ function Library:AddDraggableLabel(...)
         Label.Visible = Visible
     end
 
+    function DraggableLabel:SetTransparency(Alpha: number)
+        assert(typeof(Alpha) == "number", "Alpha 应为数字")
+        DraggableLabel.Transparency = math.clamp(Alpha, 0, 1)
+        Library.PartTransparency.FloatLabel = DraggableLabel.Transparency
+        Library:ApplyPartTransparency("FloatLabel")
+    end
+
+    DraggableLabel.Transparency = 0
+    Library:RegisterTransparencyTarget("FloatLabel", Label)
+
     DraggableLabel:SetIcon(Icon)
     DraggableLabel.Label = Label
 
@@ -3386,6 +3525,16 @@ function Library:AddDraggableButton(...)
         Button.Text = Text
         Button.Size = UDim2.fromOffset(X * 2, Y * 2)
     end
+
+    function DraggableButton:SetTransparency(Alpha: number)
+        assert(typeof(Alpha) == "number", "Alpha 应为数字")
+        DraggableButton.Transparency = math.clamp(Alpha, 0, 1)
+        Library.PartTransparency.FloatButton = DraggableButton.Transparency
+        Library:ApplyPartTransparency("FloatButton")
+    end
+
+    DraggableButton.Transparency = 0
+    Library:RegisterTransparencyTarget("FloatButton", Button)
 
     if not ExcludeDragging then
         Library:MakeDraggable(Button, Button, true)
@@ -3488,6 +3637,8 @@ function Library:AddDraggableMenu(Name: string)
         table.insert(Library.DraggableElements, Holder)
     end
 
+    Library:RegisterTransparencyTarget("FloatMenu", Holder)
+
     PositionDraggable(Holder, Holder.Position)
 
     return Holder, Container, Label, DividerLine, LabelPadding
@@ -3581,6 +3732,16 @@ function Library:AddDraggableImageButton(...)
         IconImage.Size = UDim2.fromOffset(IconSize, IconSize)
         Button.Size = UDim2.fromOffset(IconSize + 12, IconSize + 12)
     end
+
+    function DraggableImageButton:SetTransparency(Alpha: number)
+        assert(typeof(Alpha) == "number", "Alpha 应为数字")
+        DraggableImageButton.Transparency = math.clamp(Alpha, 0, 1)
+        Library.PartTransparency.FloatButton = DraggableImageButton.Transparency
+        Library:ApplyPartTransparency("FloatButton")
+    end
+
+    DraggableImageButton.Transparency = 0
+    Library:RegisterTransparencyTarget("FloatButton", Button)
 
     if not ExcludeDragging then
         Library:MakeDraggable(Button, Button, true)
@@ -11290,6 +11451,9 @@ function Library:Notify(...)
         ZIndex = 5,
         Parent = FakeBackground,
     })
+    --// 通知卡片跟着「通知卡片透明度」走
+    Library:RegisterTransparencyTarget("Notify", Holder)
+    Holder.BackgroundTransparency = Library:GetPartTransparency("Notify")
     table.insert(
         Library.Corners,
         New("UICorner", {
@@ -11782,14 +11946,28 @@ function Library:CreateWindow(WindowInfo)
             BackgroundTransparency = 0,
             Frame = KeybindFrame,
             Container = KeybindContainer,
+            DividerLine = KeybindDivider,
             SettingsFrame = SettingsFrame,
             SettingsContainer = SettingsContainer,
         }
 
-        function KeybindMenu:SetBackgroundTransparency(Enabled: boolean)
-            KeybindMenu.BackgroundTransparency = if Enabled then 0.5 else 0
+        function KeybindMenu:SetBackgroundTransparencyAlpha(Alpha: number)
+            assert(typeof(Alpha) == "number", "Alpha 应为数字")
+
+            KeybindMenu.BackgroundTransparency = math.clamp(Alpha, 0, 1)
+            Library.PartTransparency.KeybindMenu = KeybindMenu.BackgroundTransparency
+
             KeybindFrame.BackgroundTransparency = KeybindMenu.BackgroundTransparency
             SettingsFrame.BackgroundTransparency = KeybindMenu.BackgroundTransparency
+
+            if KeybindMenu.DividerLine then
+                KeybindMenu.DividerLine.BackgroundTransparency = KeybindMenu.BackgroundTransparency
+            end
+        end
+
+        --// 保留旧接口（布尔）以兼容已有脚本，内部走连续值版本
+        function KeybindMenu:SetBackgroundTransparency(Enabled: boolean)
+            KeybindMenu:SetBackgroundTransparencyAlpha(if Enabled then 0.5 else 0)
         end
 
         function KeybindMenu:RefreshSettings()
@@ -12418,6 +12596,7 @@ function Library:CreateWindow(WindowInfo)
 
     local Fading = false
     local WindowOpacity = 1
+    Library.WindowOpacity = 1
     local TransparencyBases = setmetatable({}, { __mode = "k" })
     local TransparencyTweens = setmetatable({}, { __mode = "k" })
     local TransparentBackgrounds = setmetatable({}, { __mode = "k" })
@@ -12451,7 +12630,10 @@ function Library:CreateWindow(WindowInfo)
                 end
 
                 local Base = BaseValues[Property]
-                local Target = 1 - (1 - Base) * OpacityScale
+                --// 叠加该实例所属分区的独立透明度（群组框等）
+                local Group = PartTargets[Instance]
+                local PartAlpha = if Group then math.clamp(Library.PartTransparency[Group] or 0, 0, 1) else 0
+                local Target = 1 - (1 - Base) * OpacityScale * (1 - PartAlpha)
                 local Tweens = TransparencyTweens[Instance]
                 if not Tweens then
                     Tweens = {}
@@ -12486,7 +12668,10 @@ function Library:CreateWindow(WindowInfo)
         end
         for Instance in TransparentBackgrounds do
             if Instance.Parent then
-                ApplyToInstance(Instance)
+                --// 群组框只处理当前可见标签页里的，避免一次 tween 产生大量无谓开销
+                if IsOwnerVisible(PartOwners[Instance]) then
+                    ApplyToInstance(Instance)
+                end
             else
                 TransparentBackgrounds[Instance] = nil
             end
@@ -12498,7 +12683,7 @@ function Library:CreateWindow(WindowInfo)
             TransparentBackgrounds[Instance] = true
         end
         task.defer(function()
-            if Instance.Parent and MainFrame and WindowOpacity < 1 then
+            if Instance.Parent and MainFrame and (WindowOpacity < 1 or (Library.PartTransparency.Groupbox or 0) > 0) then
                 ApplyWindowOpacity()
             end
         end)
@@ -14180,6 +14365,7 @@ function Library:CreateWindow(WindowInfo)
 
             Groupbox.AddTabbox = AddTabbox
             setmetatable(Groupbox, BaseGroupbox)
+            Library:RegisterTransparencyTarget("Groupbox", GroupboxHolder, Groupbox)
 
             Groupbox:Resize()
             Tab.Groupboxes[Info.Name] = Groupbox
@@ -14314,6 +14500,13 @@ function Library:CreateWindow(WindowInfo)
             Tab:RefreshSides()
 
             Library.ActiveTab = Tab
+
+            --// 切换标签页后补算本页群组框的透明度（群组框只算可见页）
+            if (Library.PartTransparency.Groupbox or 0) > 0 then
+                task.defer(function()
+                    Library:ApplyPartTransparency("Groupbox")
+                end)
+            end
 
             if Library.Searching then
                 Library:UpdateSearch(Library.SearchText)
@@ -15238,6 +15431,9 @@ function Library:CreateWindow(WindowInfo)
             })
         )
         Library:AddOutline(DialogFrame)
+        --// 对话框面板跟着「对话框透明度」走
+        Library:RegisterTransparencyTarget("Dialog", DialogFrame)
+        DialogFrame.BackgroundTransparency = Library:GetPartTransparency("Dialog")
 
         local InnerContainer = New("Frame", {
             BackgroundTransparency = 1,
