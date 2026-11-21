@@ -8307,6 +8307,8 @@ do
             Placeholder = Info.Placeholder,
             AllowEmpty = Info.AllowEmpty,
             EmptyReset = Info.EmptyReset,
+            --// 显示脱敏：提供函数则输入框在不聚焦时只显示脱敏文本，聚焦时才显示完整值
+            MaskValue = typeof(Info.MaskValue) == "function" and Info.MaskValue or nil,
 
             Tooltip = Info.Tooltip,
             DisabledTooltip = Info.DisabledTooltip,
@@ -8351,7 +8353,8 @@ do
             PlaceholderText = Input.Placeholder,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 21),
-            Text = Input.Value,
+            --// 有脱敏函数则初始就显示脱敏文本
+            Text = if Input.MaskValue then Input.MaskValue(Input.Value) else Input.Value,
             TextEditable = not Input.Disabled,
             TextScaled = true,
             TextXAlignment = Enum.TextXAlignment.Left,
@@ -8425,7 +8428,13 @@ do
             end
 
             Input.Value = Text
-            Box.Text = Text
+
+            --// 有脱敏函数且当前不在聚焦状态时，只显示脱敏文本
+            if Input.MaskValue and not Input.Focused then
+                Box.Text = Input.MaskValue(Text)
+            else
+                Box.Text = Text
+            end
 
             Input:RunChanged()
         end
@@ -8458,8 +8467,12 @@ do
 
         if Input.Finished then
             table.insert(Input.Connections, Box.FocusLost:Connect(function(Enter)
+                Input.Focused = false
+
                 if not Enter then
-                    if Input.ClearTextOnBlur then
+                    if Input.MaskValue then
+                        Box.Text = Input.MaskValue(Input.Value)
+                    elseif Input.ClearTextOnBlur then
                         Box.Text = Input.Value
                     end
 
@@ -8481,6 +8494,12 @@ do
                 return
             end
 
+            Input.Focused = true
+            --// 聚焦时显示完整值，方便编辑长链接
+            if Input.MaskValue then
+                Box.Text = Input.Value
+            end
+
             Library.Registry[BoxStroke].Color = "AccentColor"
             TweenService:Create(BoxStroke, Library.TweenInfo, {
                 Color = Library.Scheme.AccentColor,
@@ -8490,6 +8509,11 @@ do
         table.insert(Input.Connections, Box.FocusLost:Connect(function()
             if Input.Disabled then
                 return
+            end
+
+            Input.Focused = false
+            if Input.MaskValue then
+                Box.Text = Input.MaskValue(Input.Value)
             end
 
             Library.Registry[BoxStroke].Color = "OutlineColor"
