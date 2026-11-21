@@ -521,11 +521,6 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local OutlineColor = CreateColorOption("描边色", "OutlineColor")
     local FontColor = CreateColorOption("字体颜色", "FontColor")
 
-    local TransparencyOption = Themesbox:AddToggle("ThemeManager_BackgroundTransparent", {
-        Text = "窗口半透明（50%）",
-        Default = false,
-    })
-
     Themesbox:AddInput("BackgroundImage", {
         Text = "背景图片",
         Default = "",
@@ -767,22 +762,6 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
             local Copied = pcall(setclipboard, Content)
             Library:Notify(Copied and "主题 JSON 已复制" or "主题 JSON 已导出，请手动复制")
         end
-    end)
-
-    local function ApplyBackgroundTransparency(Enabled)
-        if Library.Window then
-            Library.Window:SetTransparency(Enabled and 0.5 or 1)
-        end
-
-        --// 同步界面设置页里的「窗口透明度」滑块，避免两处显示不一致
-        local Slider = Library.Options.WindowOpacity
-        if Slider then
-            Slider:SetValue(Enabled and 100 or 0)
-        end
-    end
-    TransparencyOption:OnChanged(ApplyBackgroundTransparency)
-    task.defer(function()
-        if Library.Window then ApplyBackgroundTransparency(TransparencyOption.Value) end
     end)
 
     --// 内置主题列表：选中即应用（与原版一致）
