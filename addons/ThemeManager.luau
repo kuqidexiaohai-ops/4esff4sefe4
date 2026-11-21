@@ -522,7 +522,7 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local FontColor = CreateColorOption("字体颜色", "FontColor")
 
     local TransparencyOption = Themesbox:AddToggle("ThemeManager_BackgroundTransparent", {
-        Text = "背景透明",
+        Text = "窗口半透明（50%）",
         Default = false,
     })
 
@@ -772,6 +772,12 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local function ApplyBackgroundTransparency(Enabled)
         if Library.Window then
             Library.Window:SetTransparency(Enabled and 0.5 or 1)
+        end
+
+        --// 同步界面设置页里的「窗口透明度」滑块，避免两处显示不一致
+        local Slider = Library.Options.WindowOpacity
+        if Slider then
+            Slider:SetValue(Enabled and 100 or 0)
         end
     end
     TransparencyOption:OnChanged(ApplyBackgroundTransparency)
