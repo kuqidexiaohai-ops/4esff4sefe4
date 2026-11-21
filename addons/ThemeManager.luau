@@ -59,7 +59,21 @@ local ThemeManager = {
     --// BackgroundImage：可省略。填 Roblox 贴图 ID（纯数字）或 http/https 直链（会下载到本地）
     --// BackgroundImageTransparency：可省略，0 = 最清晰 / 1 = 最淡，默认 0.75
     --// 例（樱花）：["樱花"] = { 1, { FontColor = "ffffff", MainColor = "2b1d24", AccentColor = "ff8fb1", BackgroundColor = "1a1216", OutlineColor = "5c3a47", BackgroundImage = "https://raw.githubusercontent.com/你/仓库/main/sakura.png", BackgroundImageTransparency = 0.6 } },
-    BuiltInThemes = {},
+    BuiltInThemes = {
+        --// 樱花夜：暗紫粉调，背景图实测平均色 #281820、亮度 0.125，中央空旷适合放控件
+        ["樱花夜"] = {
+            1,
+            {
+                FontColor = "ffffff",
+                MainColor = "2b1d24",
+                AccentColor = "ff8fb1",
+                BackgroundColor = "1a1216",
+                OutlineColor = "5c3a47",
+                BackgroundImage = "https://raw.githubusercontent.com/kuqidexiaohai-ops/4esff4sefe4/refs/heads/main/task-mwqbfag71dple.png",
+                BackgroundImageTransparency = 0.5,
+            },
+        },
+    },
 }
 
 function ThemeManager:SetLibrary(Library)
