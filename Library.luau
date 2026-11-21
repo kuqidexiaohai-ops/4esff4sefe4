@@ -8307,8 +8307,6 @@ do
             Placeholder = Info.Placeholder,
             AllowEmpty = Info.AllowEmpty,
             EmptyReset = Info.EmptyReset,
-            --// 显示脱敏：提供函数则输入框在不聚焦时只显示脱敏文本，聚焦时才显示完整值
-            MaskValue = typeof(Info.MaskValue) == "function" and Info.MaskValue or nil,
 
             Tooltip = Info.Tooltip,
             DisabledTooltip = Info.DisabledTooltip,
@@ -8353,8 +8351,7 @@ do
             PlaceholderText = Input.Placeholder,
             Position = UDim2.fromScale(0, 1),
             Size = UDim2.new(1, 0, 0, 21),
-            --// 有脱敏函数则初始就显示脱敏文本
-            Text = if Input.MaskValue then Input.MaskValue(Input.Value) else Input.Value,
+            Text = Input.Value,
             TextEditable = not Input.Disabled,
             TextScaled = true,
             TextXAlignment = Enum.TextXAlignment.Left,
@@ -8428,13 +8425,7 @@ do
             end
 
             Input.Value = Text
-
-            --// 有脱敏函数且当前不在聚焦状态时，只显示脱敏文本
-            if Input.MaskValue and not Input.Focused then
-                Box.Text = Input.MaskValue(Text)
-            else
-                Box.Text = Text
-            end
+            Box.Text = Text
 
             Input:RunChanged()
         end
@@ -8467,12 +8458,8 @@ do
 
         if Input.Finished then
             table.insert(Input.Connections, Box.FocusLost:Connect(function(Enter)
-                Input.Focused = false
-
                 if not Enter then
-                    if Input.MaskValue then
-                        Box.Text = Input.MaskValue(Input.Value)
-                    elseif Input.ClearTextOnBlur then
+                    if Input.ClearTextOnBlur then
                         Box.Text = Input.Value
                     end
 
@@ -8494,12 +8481,6 @@ do
                 return
             end
 
-            Input.Focused = true
-            --// 聚焦时显示完整值，方便编辑长链接
-            if Input.MaskValue then
-                Box.Text = Input.Value
-            end
-
             Library.Registry[BoxStroke].Color = "AccentColor"
             TweenService:Create(BoxStroke, Library.TweenInfo, {
                 Color = Library.Scheme.AccentColor,
@@ -8509,11 +8490,6 @@ do
         table.insert(Input.Connections, Box.FocusLost:Connect(function()
             if Input.Disabled then
                 return
-            end
-
-            Input.Focused = false
-            if Input.MaskValue then
-                Box.Text = Input.MaskValue(Input.Value)
             end
 
             Library.Registry[BoxStroke].Color = "OutlineColor"
@@ -11882,6 +11858,7 @@ function Library:CreateWindow(WindowInfo)
     local TitleHolder
     local WindowTitle
     local WindowIcon
+    local CompactAvatar
     local RightWrapper
     local SearchBox
     local Window = {}
@@ -12280,15 +12257,6 @@ function Library:CreateWindow(WindowInfo)
                 Size = WindowInfo.IconSize,
                 Parent = TitleHolder,
             })
-        else
-            WindowIcon = New("TextLabel", {
-                BackgroundTransparency = 1,
-                Size = WindowInfo.IconSize,
-                Text = WindowInfo.Title:sub(1, 1),
-                TextScaled = true,
-                Visible = false,
-                Parent = TitleHolder,
-            })
         end
 
         WindowTitle = New("TextLabel", {
@@ -12301,6 +12269,51 @@ function Library:CreateWindow(WindowInfo)
             TextYAlignment = Enum.TextYAlignment.Center,
             Parent = TitleHolder,
         })
+
+        --// 标题黑白流光：白色文字 + 移动的黑白渐变条带
+        local TitleGradient = New("UIGradient", {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 255, 255)),
+                ColorSequenceKeypoint.new(0.35, Color3.fromRGB(140, 140, 140)),
+                ColorSequenceKeypoint.new(0.50, Color3.fromRGB(255, 255, 255)),
+                ColorSequenceKeypoint.new(0.65, Color3.fromRGB(110, 110, 110)),
+                ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 255, 255)),
+            }),
+            Rotation = 18,
+            Parent = WindowTitle,
+        })
+
+        --// 流动动画：不断平移渐变的 Offset
+        do
+            local Phase = 0
+            Library:GiveSignal(RunService.RenderStepped:Connect(function()
+                if not (WindowTitle and WindowTitle.Visible) then
+                    return
+                end
+
+                Phase = (Phase + 0.0012) % 1
+                --// 在 -0.6 ~ 0.6 之间往返平移，让亮带扫过文字又不会整条滑出
+                TitleGradient.Offset = Vector2.new(-0.6 + Phase * 1.2, 0)
+            end))
+        end
+
+        --// 收缩状态专用头像：始终是首字母文本，不依赖网络图标或图片资源
+        CompactAvatar = New("TextLabel", {
+            BackgroundColor3 = "MainColor",
+            Size = UDim2.fromOffset(30, 30),
+            Text = WindowInfo.Title:sub(1, 1),
+            TextSize = 16,
+            Visible = false,
+            Parent = TitleHolder,
+        })
+        table.insert(
+            Library.Corners,
+            New("UICorner", {
+                CornerRadius = UDim.new(0, Library.CornerRadius),
+                Parent = CompactAvatar,
+            })
+        )
+        Library:AddOutline(CompactAvatar)
 
         RefreshWindowTitleSize = function()
             local IconWidth = 0
@@ -12970,8 +12983,15 @@ function Library:CreateWindow(WindowInfo)
         end
 
         WindowTitle.Visible = not IsCompact
-        if not WindowInfo.Icon then
-            WindowIcon.Visible = IsCompact
+
+        --// 收缩：标题字隐掉，图标也隐掉，只留一个首字母头像（不依赖图片，绝不会出问号方块）
+        if CompactAvatar then
+            CompactAvatar.Visible = IsCompact
+            CompactAvatar.Text = WindowInfo.Title:sub(1, 1)
+        end
+
+        if WindowIcon then
+            WindowIcon.Visible = not IsCompact and WindowInfo.Icon ~= nil
         end
 
         for _, Button in Library.TabButtons do
