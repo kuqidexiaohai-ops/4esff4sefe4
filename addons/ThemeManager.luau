@@ -71,32 +71,6 @@ local ThemeManager = {
                 OutlineColor = "282828",
             },
         },
-        --// 樱花夜：暗紫粉调，背景图实测平均色 #281820、亮度 0.125，中央空旷适合放控件
-        ["樱花夜"] = {
-            2,
-            {
-                FontColor = "ffffff",
-                MainColor = "2b1d24",
-                AccentColor = "ff8fb1",
-                BackgroundColor = "1a1216",
-                OutlineColor = "5c3a47",
-                BackgroundImage = "https://raw.githubusercontent.com/kuqidexiaohai-ops/4esff4sefe4/refs/heads/main/task-mwqbfag71dple.png",
-                BackgroundImageTransparency = 0.5,
-            },
-        },
-        --// 落日海岸：洛圣都夕阳暖调，背景图平均色 #89302d、中央偏亮 0.43，所以浓度调低压一层深底
-        ["落日海岸"] = {
-            3,
-            {
-                FontColor = "ffffff",
-                MainColor = "33191d",
-                AccentColor = "ff8a3d",
-                BackgroundColor = "1c1016",
-                OutlineColor = "4a2530",
-                BackgroundImage = "https://raw.githubusercontent.com/kuqidexiaohai-ops/4esff4sefe4/refs/heads/main/task-mwqcry7v2ix5o.png",
-                BackgroundImageTransparency = 0.66,
-            },
-        },
     },
 }
 
@@ -458,6 +432,18 @@ function ThemeManager:ApplyThemeData(ThemeData: any): (boolean, string?)
 
     local Library = ThemeManager.Library
 
+    --// 主题没写 BackgroundImage（比如"经典色"）时必须主动清空，
+    --// 否则从带图主题切过来，旧图会留在背景上不走
+    local HasImage = typeof(ThemeData.BackgroundImage) == "string" and ThemeData.BackgroundImage ~= ""
+    if not HasImage then
+        Library:SetBackgroundImage("")
+
+        local ImageInput = Library.Options.BackgroundImage
+        if ImageInput and ImageInput.Value ~= "" then
+            ImageInput:SetValue("")
+        end
+    end
+
     for Index, Value in ThemeData do
         if Index == "VideoLink" then
             continue
@@ -586,6 +572,13 @@ function ThemeManager:CreateThemeManager(Themesbox: any)
     local BackgroundImageOption = Library.Options.BackgroundImage
     BackgroundImageOption:OnChanged(function(Value)
         Library:SetBackgroundImage(Value)
+    end)
+
+    Themesbox:AddButton("清除背景图片", function()
+        --// SetValue 会触发上面的 OnChanged，内部已调用 SetBackgroundImage("")
+        BackgroundImageOption:SetValue("")
+        Library:SetBackgroundImage("")
+        Library:Notify("已清除背景图片")
     end)
 
     --// 浓度上限只到 80%：背景图叠在窗口上层，留 20% 透明底保证控件永远看得见
