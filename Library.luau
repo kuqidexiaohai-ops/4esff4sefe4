@@ -11865,6 +11865,7 @@ function Library:CreateWindow(WindowInfo)
     local WindowTitle
     local WindowIcon
     local CompactAvatar
+    local CompactInitial
     local CompactIconLabel
     local RightWrapper
     local SearchBox
@@ -12393,13 +12394,10 @@ function Library:CreateWindow(WindowInfo)
             return Title:sub(1, 1)
         end
 
-        --// 收缩状态专用头像：底子是首字母文本，配了 CompactIcon 时改用图案盖在上面
-        --// 两者都是 UI 自带画出来的，不依赖网络图标能不能拉到，所以绝不会出问号方块
-        CompactAvatar = New("TextLabel", {
+        --// 头像容器：固定 30x30，收缩时把图案或首字母塞进去
+        CompactAvatar = New("Frame", {
             BackgroundColor3 = "MainColor",
             Size = UDim2.fromOffset(30, 30),
-            Text = GetTitleInitial(WindowInfo.Title),
-            TextSize = 16,
             Visible = false,
             Parent = TitleHolder,
         })
@@ -12412,28 +12410,63 @@ function Library:CreateWindow(WindowInfo)
         )
         Library:AddOutline(CompactAvatar)
 
-        --// 图案层：只在 CompactIcon 能解析成有效图标时才创建并显示
-        --// 注意 lucide 图标是字体图标（走 FontFace），不是图片，
-        --// 所以必须用 CreateIcon 让它自己选 TextLabel 还是 ImageLabel，不能写死 ImageLabel
-        local CompactIconData = if WindowInfo.CompactIcon then Library:GetCustomIcon(WindowInfo.CompactIcon) else nil
-        if CompactIconData then
-            CompactIconLabel = Library:CreateIcon(CompactIconData, {
+        --// 首字母：图案还没就绪时的兜底
+        CompactInitial = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Text = GetTitleInitial(WindowInfo.Title),
+            TextSize = 16,
+            Parent = CompactAvatar,
+        })
+        Library:AddToRegistry(CompactInitial, { TextColor3 = "FontColor" })
+        CompactInitial.TextColor3 = Library.Scheme.FontColor
+
+        --// 图案：独立建造函数，图标取不到时返回 false，由调用方稍后重试
+        local BuildCompactIcon
+        BuildCompactIcon = function(): boolean
+            if CompactIconLabel or not WindowInfo.CompactIcon then
+                return CompactIconLabel ~= nil
+            end
+
+            local IconData = Library:GetCustomIcon(WindowInfo.CompactIcon)
+            if not IconData then
+                return false
+            end
+
+            --// lucide 是字体图标（FontFace），不是图片，必须让 CreateIcon 自己决定建 TextLabel 还是 ImageLabel
+            CompactIconLabel = Library:CreateIcon(IconData, {
                 AnchorPoint = Vector2.new(0.5, 0.5),
                 Position = UDim2.fromScale(0.5, 0.5),
                 Size = UDim2.fromOffset(16, 16),
                 ImageColor3 = "FontColor",
-                Visible = false,
+                Visible = CompactAvatar.Visible,
                 Parent = CompactAvatar,
             })
 
-            --// 换成主题时跟着变色：图片图标用 ImageColor3，字体图标用 TextColor3
             if CompactIconLabel:IsA("TextLabel") or CompactIconLabel:IsA("TextButton") then
-                CompactIconLabel.TextColor3 = Library.Scheme.FontColor
                 Library:AddToRegistry(CompactIconLabel, { TextColor3 = "FontColor" })
+                CompactIconLabel.TextColor3 = Library.Scheme.FontColor
             else
-                CompactIconLabel.ImageColor3 = Library.Scheme.FontColor
                 Library:AddToRegistry(CompactIconLabel, { ImageColor3 = "FontColor" })
+                CompactIconLabel.ImageColor3 = Library.Scheme.FontColor
             end
+
+            --// 有图案了就只留图案，首字母让位
+            CompactInitial.Visible = false
+            return true
+        end
+
+        --// 图标是网络拉取的，可能比窗口晚了很久才就绪：
+        --// 先试一次，失败就挂个重试，拿到为止（最多约 10 秒），彻底拿不到就停用首字母兜底
+        if not BuildCompactIcon() then
+            task.spawn(function()
+                for _ = 1, 100 do
+                    task.wait(0.1)
+                    if BuildCompactIcon() then
+                        return
+                    end
+                end
+            end)
         end
 
         RefreshWindowTitleSize = function()
@@ -12875,6 +12908,11 @@ function Library:CreateWindow(WindowInfo)
         WindowTitle.Text = FormatTitle(title)
         WindowInfo.Title = title
         RefreshWindowTitleSize()
+
+        --// 名字改了，头像兜底字母也要跟着变
+        if CompactInitial then
+            CompactInitial.Text = GetTitleInitial(title)
+        end
     end
 
     function Window:RefreshTitleSize()
@@ -13105,10 +13143,21 @@ function Library:CreateWindow(WindowInfo)
 
         WindowTitle.Visible = not IsCompact
 
-        --// 收缩：标题字隐掉，图标也隐掉，只留头像；配了图案就用图案，没配就用首字母
+        --// 收缩：标题字隐掉，图标也隐掉，只留头像；有图案就只显示图案，没有才回退首字母
         if CompactAvatar then
             CompactAvatar.Visible = IsCompact
-            CompactAvatar.Text = if CompactIconLabel then "" else GetTitleInitial(WindowInfo.Title)
+        end
+
+        if CompactAvatar and CompactInitial then
+            --// 收缩时再试一次构建，防止图标在窗口建好之后才就绪
+            if IsCompact then
+                BuildCompactIcon()
+            end
+        end
+
+        if CompactInitial then
+            CompactInitial.Text = GetTitleInitial(WindowInfo.Title)
+            CompactInitial.Visible = IsCompact and CompactIconLabel == nil
         end
 
         if CompactIconLabel then
@@ -13120,16 +13169,17 @@ function Library:CreateWindow(WindowInfo)
         end
 
         for _, Button in Library.TabButtons do
-            if not Button.Icon then
-                continue
-            end
-
+            --// 文字和内边距都无条件按收缩状态处理：不能因为图标为 nil 就跳过，
+            --// 否则图标一拉取失败，收缩后这栏文字就永远藏不掉、间距也还是展开态
             Button.Label.Visible = not IsCompact
             Button.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 11)
             Button.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 12)
             Button.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
             Button.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 11)
-            Button.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
+
+            if Button.Icon then
+                Button.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
+            end
         end
     end
 
