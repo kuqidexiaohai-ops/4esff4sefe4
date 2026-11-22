@@ -12410,31 +12410,42 @@ function Library:CreateWindow(WindowInfo)
         )
         Library:AddOutline(CompactAvatar)
 
-        --// 首字母：图案还没就绪时的兜底
+        --// lucide 的 letter-a ~ letter-z 本身就是一封字母：直接本地画字最稳，
+        --// 不依赖图标图集能不能加载（图集加载不出来时，那一格就是个空方块）
+        local CompactLetterChar = if typeof(WindowInfo.CompactIcon) == "string"
+            then WindowInfo.CompactIcon:match("^letter%-(%a)$")
+            else nil
+
+        --// 字母：既是兜底，也是 letter-x 模式的正式内容
         CompactInitial = New("TextLabel", {
             BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
             Size = UDim2.fromScale(1, 1),
-            Text = GetTitleInitial(WindowInfo.Title),
-            TextSize = 16,
+            Text = if CompactLetterChar then CompactLetterChar:upper() else GetTitleInitial(WindowInfo.Title),
+            TextSize = 17,
             Parent = CompactAvatar,
         })
         Library:AddToRegistry(CompactInitial, { TextColor3 = "FontColor" })
         CompactInitial.TextColor3 = Library.Scheme.FontColor
 
         --// 图案：独立建造函数，图标取不到时返回 false，由调用方稍后重试
+        --// 全程 pcall，绝不让图标这边的问题把收缩逻辑带崩
         local BuildCompactIcon
         BuildCompactIcon = function(): boolean
-            if CompactIconLabel or not WindowInfo.CompactIcon then
-                return CompactIconLabel ~= nil
+            if CompactIconLabel or CompactLetterChar then
+                return true
             end
 
-            local IconData = Library:GetCustomIcon(WindowInfo.CompactIcon)
-            if not IconData then
+            if not WindowInfo.CompactIcon then
                 return false
             end
 
-            --// lucide 是字体图标（FontFace），不是图片，必须让 CreateIcon 自己决定建 TextLabel 还是 ImageLabel
-            CompactIconLabel = Library:CreateIcon(IconData, {
+            local DataOk, IconData = pcall(Library.GetCustomIcon, Library, WindowInfo.CompactIcon)
+            if not DataOk or not IconData then
+                return false
+            end
+
+            local BuiltOk, Built = pcall(Library.CreateIcon, Library, IconData, {
                 AnchorPoint = Vector2.new(0.5, 0.5),
                 Position = UDim2.fromScale(0.5, 0.5),
                 Size = UDim2.fromOffset(16, 16),
@@ -12442,6 +12453,12 @@ function Library:CreateWindow(WindowInfo)
                 Visible = CompactAvatar.Visible,
                 Parent = CompactAvatar,
             })
+
+            if not BuiltOk or not Built then
+                return false
+            end
+
+            CompactIconLabel = Built
 
             if CompactIconLabel:IsA("TextLabel") or CompactIconLabel:IsA("TextButton") then
                 Library:AddToRegistry(CompactIconLabel, { TextColor3 = "FontColor" })
@@ -12451,13 +12468,13 @@ function Library:CreateWindow(WindowInfo)
                 CompactIconLabel.ImageColor3 = Library.Scheme.FontColor
             end
 
-            --// 有图案了就只留图案，首字母让位
+            --// 有图案了就只留图案，字母让位
             CompactInitial.Visible = false
             return true
         end
 
         --// 图标是网络拉取的，可能比窗口晚了很久才就绪：
-        --// 先试一次，失败就挂个重试，拿到为止（最多约 10 秒），彻底拿不到就停用首字母兜底
+        --// 先试一次，失败就挂个重试，拿到为止（最多约 10 秒），彻底拿不到就停用字母兜底
         if not BuildCompactIcon() then
             task.spawn(function()
                 for _ = 1, 100 do
@@ -12909,8 +12926,8 @@ function Library:CreateWindow(WindowInfo)
         WindowInfo.Title = title
         RefreshWindowTitleSize()
 
-        --// 名字改了，头像兜底字母也要跟着变
-        if CompactInitial then
+        --// 名字改了，头像兜底字母也要跟着变（letter-x 模式保持那封字母不变）
+        if CompactInitial and not CompactLetterChar then
             CompactInitial.Text = GetTitleInitial(title)
         end
     end
@@ -13135,6 +13152,17 @@ function Library:CreateWindow(WindowInfo)
         end
     end
 
+    local CompactWarned = false
+    local function WarnCompact(Stage: string, Err: any)
+        --// 只在第一次报警，免得拖拽侧栏时刷屏
+        if CompactWarned then
+            return
+        end
+
+        CompactWarned = true
+        warn(("[Obsidian] 收缩逻辑「%s」出错：%s"):format(Stage, tostring(Err)))
+    end
+
     local function ApplyCompact()
         IsCompact = Window:GetSidebarWidth() == WindowInfo.SidebarCompactWidth
         if WindowInfo.DisableCompactingSnap then
@@ -13143,43 +13171,79 @@ function Library:CreateWindow(WindowInfo)
 
         WindowTitle.Visible = not IsCompact
 
-        --// 收缩：标题字隐掉，图标也隐掉，只留头像；有图案就只显示图案，没有才回退首字母
-        if CompactAvatar then
-            CompactAvatar.Visible = IsCompact
+        --// ① 先同步侧栏按钮
+        --// 放在最前面：即使下面头像/图案那段因为图标、主题之类的原因出问题，
+        --// 收缩后也绝不会把文字留在侧栏里
+        local Synced, SyncError = pcall(function()
+            for _, Button in Library.TabButtons do
+                if typeof(Button) ~= "table" then
+                    continue
+                end
+
+                --// 每个字段都单独判空：某个按钮少登记一个字段不该连累其他按钮
+                local Label = Button.Label
+                if Label then
+                    Label.Visible = not IsCompact
+                end
+
+                local Padding = Button.Padding
+                if Padding then
+                    Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 11)
+                    Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 12)
+                    Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
+                    Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 11)
+                end
+
+                local Icon = Button.Icon
+                if Icon then
+                    Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
+                end
+            end
+
+            --// 兜底：按名字再扫一遍侧栏，防止有的按钮没登记进 TabButtons
+            local TabsFrame = Tabs
+            if TabsFrame then
+                for _, Node in TabsFrame:GetDescendants() do
+                    if Node:IsA("TextLabel") and Node.Name == "TabLabel" then
+                        Node.Visible = not IsCompact
+                    end
+                end
+            end
+        end)
+
+        if not Synced then
+            WarnCompact("侧栏按钮", SyncError)
         end
 
-        if CompactAvatar and CompactInitial then
+        --// ② 头像与图案
+        local AvatarOk, AvatarError = pcall(function()
+            if CompactAvatar then
+                CompactAvatar.Visible = IsCompact
+            end
+
             --// 收缩时再试一次构建，防止图标在窗口建好之后才就绪
-            if IsCompact then
+            if IsCompact and CompactAvatar and CompactInitial then
                 BuildCompactIcon()
             end
-        end
 
-        if CompactInitial then
-            CompactInitial.Text = GetTitleInitial(WindowInfo.Title)
-            CompactInitial.Visible = IsCompact and CompactIconLabel == nil
-        end
-
-        if CompactIconLabel then
-            CompactIconLabel.Visible = IsCompact
-        end
-
-        if WindowIcon then
-            WindowIcon.Visible = not IsCompact and WindowInfo.Icon ~= nil
-        end
-
-        for _, Button in Library.TabButtons do
-            --// 文字和内边距都无条件按收缩状态处理：不能因为图标为 nil 就跳过，
-            --// 否则图标一拉取失败，收缩后这栏文字就永远藏不掉、间距也还是展开态
-            Button.Label.Visible = not IsCompact
-            Button.Padding.PaddingBottom = UDim.new(0, IsCompact and 6 or 11)
-            Button.Padding.PaddingLeft = UDim.new(0, IsCompact and 6 or 12)
-            Button.Padding.PaddingRight = UDim.new(0, IsCompact and 6 or 12)
-            Button.Padding.PaddingTop = UDim.new(0, IsCompact and 6 or 11)
-
-            if Button.Icon then
-                Button.Icon.SizeConstraint = IsCompact and Enum.SizeConstraint.RelativeXY or Enum.SizeConstraint.RelativeYY
+            if CompactInitial then
+                CompactInitial.Text = if CompactLetterChar
+                    then CompactLetterChar:upper()
+                    else GetTitleInitial(WindowInfo.Title)
+                CompactInitial.Visible = IsCompact and CompactIconLabel == nil
             end
+
+            if CompactIconLabel then
+                CompactIconLabel.Visible = IsCompact
+            end
+
+            if WindowIcon then
+                WindowIcon.Visible = not IsCompact and WindowInfo.Icon ~= nil
+            end
+        end)
+
+        if not AvatarOk then
+            WarnCompact("收缩头像", AvatarError)
         end
     end
 
@@ -13390,6 +13454,8 @@ function Library:CreateWindow(WindowInfo)
             })
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
+                --// 起个名字：收缩时按名字兜底隐藏，不依赖 TabButtons 是否登记成功
+                Name = "TabLabel",
                 Position = UDim2.fromOffset(30, 0),
                 Size = UDim2.new(1, -30, 1, 0),
                 Text = Name,
@@ -15013,6 +15079,8 @@ function Library:CreateWindow(WindowInfo)
 
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
+                --// 起个名字：收缩时按名字兜底隐藏，不依赖 TabButtons 是否登记成功
+                Name = "TabLabel",
                 Position = UDim2.fromOffset(30, 0),
                 Size = UDim2.new(1, -30, 1, 0),
                 Text = Name,
@@ -15403,6 +15471,8 @@ function Library:CreateWindow(WindowInfo)
 
             TabLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
+                --// 起个名字：收缩时按名字兜底隐藏，不依赖 TabButtons 是否登记成功
+                Name = "TabLabel",
                 Position = UDim2.fromOffset(30, 0),
                 Size = UDim2.new(1, -30, 1, 0),
                 Text = Name,
