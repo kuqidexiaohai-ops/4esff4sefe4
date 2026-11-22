@@ -11867,6 +11867,11 @@ function Library:CreateWindow(WindowInfo)
     local CompactAvatar
     local CompactInitial
     local CompactIconLabel
+    --// 这三个必须在这里声明：ApplyCompact 在外层作用域，
+    --// 如果只在下面的 do 块里 local，它取到的就是 nil（调用会报 attempt to call a nil value）
+    local GetTitleInitial
+    local CompactLetterChar
+    local BuildCompactIcon
     local RightWrapper
     local SearchBox
     local Window = {}
@@ -12379,7 +12384,7 @@ function Library:CreateWindow(WindowInfo)
 
         --// 取首个「完整字符」做头像文字：sub(1,1) 是按字节切的，中文标题会被切成半个字
         --// 优先用 utf8 库，取不到时退回按字节切（纯 ASCII 标题不受影响）
-        local function GetTitleInitial(Title: string): string
+        GetTitleInitial = function(Title: string): string
             if typeof(Title) ~= "string" or Title == "" then
                 return "?"
             end
@@ -12412,7 +12417,7 @@ function Library:CreateWindow(WindowInfo)
 
         --// lucide 的 letter-a ~ letter-z 本身就是一封字母：直接本地画字最稳，
         --// 不依赖图标图集能不能加载（图集加载不出来时，那一格就是个空方块）
-        local CompactLetterChar = if typeof(WindowInfo.CompactIcon) == "string"
+        CompactLetterChar = if typeof(WindowInfo.CompactIcon) == "string"
             then WindowInfo.CompactIcon:match("^letter%-(%a)$")
             else nil
 
@@ -12430,7 +12435,6 @@ function Library:CreateWindow(WindowInfo)
 
         --// 图案：独立建造函数，图标取不到时返回 false，由调用方稍后重试
         --// 全程 pcall，绝不让图标这边的问题把收缩逻辑带崩
-        local BuildCompactIcon
         BuildCompactIcon = function(): boolean
             if CompactIconLabel or CompactLetterChar then
                 return true
@@ -13222,14 +13226,21 @@ function Library:CreateWindow(WindowInfo)
             end
 
             --// 收缩时再试一次构建，防止图标在窗口建好之后才就绪
-            if IsCompact and CompactAvatar and CompactInitial then
+            --// 判空 BuildCompactIcon：万一 ApplyCompact 在构建函数赋值之前就被调用，也不会崩
+            if IsCompact and CompactAvatar and CompactInitial and BuildCompactIcon then
                 BuildCompactIcon()
             end
 
             if CompactInitial then
-                CompactInitial.Text = if CompactLetterChar
+                local Letter = if CompactLetterChar and CompactLetterChar ~= ""
                     then CompactLetterChar:upper()
-                    else GetTitleInitial(WindowInfo.Title)
+                    elseif GetTitleInitial then GetTitleInitial(WindowInfo.Title)
+                    else nil
+
+                if Letter then
+                    CompactInitial.Text = Letter
+                end
+
                 CompactInitial.Visible = IsCompact and CompactIconLabel == nil
             end
 
